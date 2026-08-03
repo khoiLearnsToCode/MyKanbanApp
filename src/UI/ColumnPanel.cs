@@ -166,7 +166,7 @@ namespace KanbanDashboard.UI
                 // Track: slightly lighter than the panel background
                 // Thumb: 40% of the way from panel toward text — visible but muted
                 _track.BackColor = ColorHelper.Soften(panelBg, 0.10f);
-                _thumb.BackColor = Blend(panelBg, text, 0.40f);
+                _thumb.BackColor = ColorHelper.Blend(panelBg, text, 0.40f);
                 RefreshThumbRegion();
             }
 
@@ -273,13 +273,13 @@ namespace KanbanDashboard.UI
 
             private void RefreshThumbRegion()
             {
-                if (_thumb.Width > 0 && _thumb.Height > 0)
-                {
-                    using var path = ColorHelper.RoundedRectPath(
-                        new Rectangle(0, 0, _thumb.Width, _thumb.Height),
-                        _thumb.Width / 2);
-                    _thumb.Region = new Region(path);
-                }
+                if (_thumb.Width <= 0 || _thumb.Height <= 0) return;
+                using var path = ColorHelper.RoundedRectPath(
+                    new Rectangle(0, 0, _thumb.Width, _thumb.Height),
+                    _thumb.Width / 2);
+                var old = _thumb.Region;
+                _thumb.Region = new Region(path);
+                old?.Dispose();
             }
 
             // ── Helpers ───────────────────────────────────────────────────
@@ -294,16 +294,6 @@ namespace KanbanDashboard.UI
 
             private int AvailableCardWidth() =>
                 Math.Max(_content.Width - _content.Padding.Horizontal - 2, 140);
-
-            /// <summary>Linear blend: 0 = all bg, 1 = all fg.</summary>
-            private static Color Blend(Color bg, Color fg, float t)
-            {
-                t = Math.Clamp(t, 0f, 1f);
-                return Color.FromArgb(
-                    (int)(bg.R + (fg.R - bg.R) * t),
-                    (int)(bg.G + (fg.G - bg.G) * t),
-                    (int)(bg.B + (fg.B - bg.B) * t));
-            }
         }
 
         // ── DotHeaderPanel ───────────────────────────────────────────────────────

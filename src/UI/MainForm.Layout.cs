@@ -27,6 +27,9 @@ namespace KanbanDashboard.UI
         private ColumnPanel _chillColumn;
         private ColumnPanel _doneColumn;
 
+        /// <summary>Ordered left-to-right; avoids rebuilding the array on every loop.</summary>
+        private ColumnPanel[] _allColumns;
+
         private void BuildLayout()
         {
             Text            = "Khoi's Kanban Dashboard";
@@ -49,7 +52,7 @@ namespace KanbanDashboard.UI
                 Width     = 380,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Font      = new Font("Segoe UI", 14f, FontStyle.Bold),
-                Text      = "Welcome back!"
+                Text      = "Welcome back, Khoi!"
             };
 
             // Digital clock (right of greeting, fills remaining left space)
@@ -136,6 +139,8 @@ namespace KanbanDashboard.UI
             _boardLayout.Controls.Add(_chillColumn,       2, 0);
             _boardLayout.Controls.Add(_doneColumn,        3, 0);
 
+            _allColumns = new[] { _urgentColumn, _prioritizedColumn, _chillColumn, _doneColumn };
+
             Controls.Add(_boardLayout);
             Controls.Add(_topBar);
         }
@@ -163,8 +168,12 @@ namespace KanbanDashboard.UI
             protected override void OnResize(EventArgs e)
             {
                 base.OnResize(e);
-                if (Width > 0 && Height > 0)
-                    Region = new Region(ColorHelper.RoundedRectPath(new Rectangle(0, 0, Width, Height), Height / 2));
+                if (Width <= 0 || Height <= 0) return;
+                using var path = ColorHelper.RoundedRectPath(
+                    new Rectangle(0, 0, Width, Height), Height / 2);
+                var old = Region;
+                Region = new Region(path);
+                old?.Dispose();
             }
         }
     }

@@ -45,7 +45,7 @@ namespace KanbanDashboard.UI
             _themeButton.Click     += (_, _) => EditTheme();
             _clearDoneButton.Click += (_, _) => ClearDone();
 
-            foreach (var col in new[] { _urgentColumn, _prioritizedColumn, _chillColumn, _doneColumn })
+            foreach (var col in _allColumns)
             {
                 col.EditRequested     += (_, task)   => EditTask(task);
                 col.DeleteRequested   += (_, task)   => DeleteTask(task);
@@ -69,8 +69,8 @@ namespace KanbanDashboard.UI
         }
 
         // ── Borderless drag (OS-native, no manual delta) ────────────────────
-        private const int WM_NCLBUTTONDOWN = 0x00A1;
-        private const int HT_CAPTION       = 0x0002;
+        private const int WM_NCLBUTTONDOWN = 0xA1;
+        private const int HT_CAPTION       = 0x02;
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern bool ReleaseCapture();
@@ -92,7 +92,6 @@ namespace KanbanDashboard.UI
         // the base result overwriting ours, and uses (short) casts so negative
         // screen coordinates on multi-monitor setups decode correctly.
         private const int WM_NCHITTEST  = 0x0084;
-        private const int HTCLIENT      = 1;
         private const int HTLEFT        = 10;
         private const int HTRIGHT       = 11;
         private const int HTTOP         = 12;
@@ -306,14 +305,14 @@ namespace KanbanDashboard.UI
             _chillColumn.SetAccentColor(ColorHelper.ParseHexOrDefault(theme.ChillColumnHex,             Color.SteelBlue));
             _doneColumn.SetAccentColor(ColorHelper.ParseHexOrDefault(theme.DoneColumnHex,               Color.SeaGreen));
 
-            foreach (var col in new[] { _urgentColumn, _prioritizedColumn, _chillColumn, _doneColumn })
+            foreach (var col in _allColumns)
                 col.SetBackgroundColors(panel, text);
         }
 
         /// <summary>Clears and rebuilds all four columns from the current task list. Cheap enough to call on every tick/edit.</summary>
         private void RenderBoard()
         {
-            foreach (var col in new[] { _urgentColumn, _prioritizedColumn, _chillColumn, _doneColumn })
+            foreach (var col in _allColumns)
                 col.ClearCards();
 
             // Non-done columns: soonest deadline first so pressing tasks sit at the top.
@@ -335,7 +334,7 @@ namespace KanbanDashboard.UI
                 PanelFor(task.Column).AddCard(card);
             }
 
-            foreach (var col in new[] { _urgentColumn, _prioritizedColumn, _chillColumn, _doneColumn })
+            foreach (var col in _allColumns)
                 col.UpdateHeaderCount(_data.Tasks.Count(t => t.Column == col.Column));
         }
 

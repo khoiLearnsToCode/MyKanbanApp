@@ -78,12 +78,36 @@ namespace KanbanDashboard.Services
         {
             int d = radius * 2;
             var path = new GraphicsPath();
-            path.AddArc(bounds.X, bounds.Y, d, d, 180, 90);
-            path.AddArc(bounds.Right - d, bounds.Y, d, d, 270, 90);
-            path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90);
-            path.AddArc(bounds.X, bounds.Bottom - d, d, d, 90, 90);
+            path.AddArc(bounds.X,           bounds.Y,            d, d, 180, 90);
+            path.AddArc(bounds.Right - d,   bounds.Y,            d, d, 270, 90);
+            path.AddArc(bounds.Right - d,   bounds.Bottom - d,   d, d,   0, 90);
+            path.AddArc(bounds.X,           bounds.Bottom - d,   d, d,  90, 90);
             path.CloseFigure();
             return path;
+        }
+
+        /// <summary>
+        /// Returns near-black or near-white, whichever gives the higher contrast against
+        /// <paramref name="bg"/>, using the WCAG relative-luminance formula.
+        /// </summary>
+        public static Color ContrastColor(Color bg)
+        {
+            double luminance = 0.2126 * (bg.R / 255.0)
+                             + 0.7152 * (bg.G / 255.0)
+                             + 0.0722 * (bg.B / 255.0);
+            return luminance > 0.45
+                ? Color.FromArgb(30, 30, 30)
+                : Color.FromArgb(230, 230, 230);
+        }
+
+        /// <summary>Linear colour blend. t=0 returns <paramref name="from"/>; t=1 returns <paramref name="to"/>.</summary>
+        public static Color Blend(Color from, Color to, float t)
+        {
+            t = Math.Clamp(t, 0f, 1f);
+            return Color.FromArgb(
+                (int)(from.R + (to.R - from.R) * t),
+                (int)(from.G + (to.G - from.G) * t),
+                (int)(from.B + (to.B - from.B) * t));
         }
     }
 }

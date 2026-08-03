@@ -210,6 +210,7 @@ namespace KanbanDashboard.UI
 
             _progressTrack.Percent = pct;
             _progressPercentLabel.Text = $"{(int)(pct * 100)}%";
+            _progressTrack.Invalidate();
         }
 
         /// <summary>Applies the theme's colors, plus the mild green/red "Done" vibe and the status pill's accent.</summary>
@@ -233,7 +234,7 @@ namespace KanbanDashboard.UI
                 // After softening, the background may be much lighter than the theme's
                 // text color (which is usually light in dark themes).  Pick whichever of
                 // black / white gives better contrast so text is always readable.
-                textColor = ContrastColor(background);
+                textColor = ColorHelper.ContrastColor(background);
             }
             else if (Task.IsOverdue)
             {
@@ -243,7 +244,7 @@ namespace KanbanDashboard.UI
                 pillText   = "Overdue";
 
                 // Same contrast fix for overdue tints in dark themes.
-                textColor = ContrastColor(background);
+                textColor = ColorHelper.ContrastColor(background);
             }
 
             var mutedText = ColorHelper.Soften(textColor, 0.25f);
@@ -271,27 +272,13 @@ namespace KanbanDashboard.UI
             Invalidate();
         }
 
-        /// <summary>
-        /// Returns black or white, whichever gives higher contrast against
-        /// <paramref name="bg"/> using the WCAG relative-luminance formula.
-        /// </summary>
-        private static Color ContrastColor(Color bg)
-        {
-            // Perceived luminance (0–1)
-            double r = bg.R / 255.0;
-            double g = bg.G / 255.0;
-            double b = bg.B / 255.0;
-            double luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-            return luminance > 0.45 ? Color.FromArgb(30, 30, 30) : Color.FromArgb(230, 230, 230);
-        }
-
         private string ColumnAccentHex(AppTheme theme) => Task.Column switch
         {
-            BoardColumn.Urgent => theme.UrgentColumnHex,
+            BoardColumn.Urgent      => theme.UrgentColumnHex,
             BoardColumn.Prioritized => theme.PrioritizedColumnHex,
-            BoardColumn.Chill => theme.ChillColumnHex,
-            BoardColumn.Done => theme.DoneColumnHex,
-            _ => theme.CardBackgroundHex
+            BoardColumn.Chill       => theme.ChillColumnHex,
+            BoardColumn.Done        => theme.DoneColumnHex,
+            _                       => theme.CardBackgroundHex
         };
 
         protected override void OnHandleCreated(EventArgs e)
@@ -302,10 +289,12 @@ namespace KanbanDashboard.UI
 
         private void UpdateRoundedRegion()
         {
-            if (Width <= 0 || Height <= 0)
-                return;
-            using var path = ColorHelper.RoundedRectPath(new Rectangle(0, 0, Width, Height), CornerRadius);
+            if (Width <= 0 || Height <= 0) return;
+            using var path = ColorHelper.RoundedRectPath(
+                new Rectangle(0, 0, Width, Height), CornerRadius);
+            var old = Region;
             Region = new Region(path);
+            old?.Dispose();
         }
 
         protected override void OnPaint(PaintEventArgs e)
