@@ -89,6 +89,29 @@ dotnet publish src/KanbanDashboard.csproj -c Release -r win-x64 ^
 
 The standalone exe will be at `publish/KanbanDashboard.exe` (~60 MB, no .NET needed).
 
+#### 5. Publish a faster-starting multi-file build *(optional)*
+
+The single-file bundle above must extract itself into a temp folder on first launch, which adds ~1-2 s of startup time. If that matters to you, publish without bundling:
+
+```bash
+dotnet publish src/KanbanDashboard.csproj -c Release -r win-x64 ^
+  --self-contained true ^
+  -p:PublishSingleFile=false ^
+  -o publish-fast
+```
+
+This produces a `publish-fast/` folder containing `KanbanDashboard.exe` and its supporting DLLs.
+Keep the whole folder together — the exe will not run if the DLLs are missing.
+Still no .NET installation required on the target machine.
+
+| | Single-file (`publish/`) | Multi-file (`publish-fast/`) |
+|---|---|---|
+| Distribution | One `.exe` file | Whole folder |
+| First-launch speed | ~1-2 s extraction delay | Instant |
+| Size on disk | ~60 MB (compressed) | ~150 MB |
+
+
+
 ---
 
 ## Usage
