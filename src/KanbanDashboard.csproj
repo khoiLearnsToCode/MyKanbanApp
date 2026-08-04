@@ -23,7 +23,11 @@
     <!-- Quick JIT keeps startup CPU burst low; we don't need max steady-state throughput -->
     <TieredCompilation>true</TieredCompilation>
     <TieredPGO>false</TieredPGO>
-    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Left OFF (not InvariantGlobalization=true): that mode saves a little startup
+         time/memory, but it breaks any native Win32 control - like the DateTimePicker
+         in the Add Task dialog - that needs to read the OS's actual locale (e.g. on a
+         non-English Windows install). Correctness wins over the minor saving here. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
     <!-- Only ship English satellite resource assemblies (translated .NET/WinForms
          error-message strings) instead of one folder per supported language -
          that's what those cs/de/es/fr/... folders in the publish output are. -->

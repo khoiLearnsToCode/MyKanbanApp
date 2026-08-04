@@ -27,7 +27,7 @@ A lightweight, keyboard-friendly Kanban board for Windows — built with .NET 8 
 
 ## Screenshots
 
-> _Add your own screenshots here once the app is running._
+![Kanban Dashboard Screenshot](src/Screenshot.png)
 
 ---
 
