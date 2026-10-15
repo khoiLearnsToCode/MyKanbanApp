@@ -11,12 +11,9 @@ namespace KanbanDashboard.UI
     {
         private readonly DataStore _store = new();
         private AppData _data;
+        private bool    _saveErrorShown;
 
-        // Deadline ticker – fires once a minute (very low CPU overhead).
         private readonly System.Windows.Forms.Timer _deadlineTimer = new() { Interval = 60_000 };
-
-        // Clock ticker – fires once a second to update the HH:mm:ss display.
-        // A Label repaint is negligible: ~0 % CPU at steady state.
         private readonly System.Windows.Forms.Timer _clockTimer = new() { Interval = 1_000 };
 
         public MainForm()
@@ -25,8 +22,10 @@ namespace KanbanDashboard.UI
             WireEvents();
 
             _data = _store.Load();
+            if (_store.LoadWarning != null)
+                Shown += (_, _) => MessageBox.Show(this, _store.LoadWarning, "Khoi's Kanban",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
 
-            // Apply deadline escalation once at startup against the current clock.
             DeadlineService.ApplyRules(_data.Tasks, DateTime.Now);
 
             ApplyTheme();
@@ -53,22 +52,17 @@ namespace KanbanDashboard.UI
                 col.QuickAddRequested += (_, column) => AddTask(column);
             }
 
-            FormClosing += (_, _) => _store.Save(_data);
+            FormClosing += OnFormClosingSave;
 
-            // Drag the borderless window by clicking anywhere on the top bar.
-            // ReleaseCapture + SendMessage(HTCAPTION) hands the move entirely to
-            // the OS so there is no jitter or coordinate-overflow risk.
             MouseDown        += OnTopBarMouseDown;
             _topBar.MouseDown      += OnTopBarMouseDown;
             _appTitleLabel.MouseDown += OnTopBarMouseDown;
             _clockLabel.MouseDown    += OnTopBarMouseDown;
 
-            // ── Keyboard shortcuts ──────────────────────────────────────────
             KeyPreview = true;
             KeyDown    += OnGlobalKeyDown;
         }
 
-        // ── Borderless drag (OS-native, no manual delta) ────────────────────
         private const int WM_NCLBUTTONDOWN = 0xA1;
         private const int HT_CAPTION       = 0x02;
 
@@ -87,10 +81,6 @@ namespace KanbanDashboard.UI
             }
         }
 
-        // ── Borderless resize via WndProc ──────────────────────────────────
-        // Intercepts WM_NCHITTEST *before* base so we can return early without
-        // the base result overwriting ours, and uses (short) casts so negative
-        // screen coordinates on multi-monitor setups decode correctly.
         private const int WM_NCHITTEST  = 0x0084;
         private const int HTLEFT        = 10;
         private const int HTRIGHT       = 11;
@@ -106,7 +96,6 @@ namespace KanbanDashboard.UI
         {
             if (m.Msg == WM_NCHITTEST)
             {
-                // Decode screen position using signed 16-bit shorts (handles negative coords)
                 int lp  = (int)m.LParam.ToInt64();
                 var pos = PointToClient(new Point((short)(lp & 0xFFFF), (short)(lp >> 16)));
 
@@ -137,17 +126,55 @@ namespace KanbanDashboard.UI
             else if (e.KeyCode == Keys.Escape)
             {
                 e.SuppressKeyPress = true;
-                Application.Exit(); // saves via FormClosing, then terminates the process
+                Application.Exit();
             }
+        }
+
+        private void SaveBoard()
+        {
+            if (_store.Save(_data, out var error))
+            {
+                _saveErrorShown = false;
+                return;
+            }
+
+            // Warn once per failure streak; the timer may retry saving every minute.
+            if (_saveErrorShown)
+                return;
+            _saveErrorShown = true;
+            MessageBox.Show(this, "Your board could not be saved:\n" + error +
+                "\n\nChanges are kept in memory and saving will be retried on the next change.",
+                "Khoi's Kanban", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+
+        private void OnFormClosingSave(object sender, FormClosingEventArgs e)
+        {
+            if (_store.Save(_data, out var error))
+                return;
+
+            if (e.CloseReason == CloseReason.WindowsShutDown)
+                return;
+
+            var choice = MessageBox.Show(this, "Your board could not be saved:\n" + error +
+                "\n\nClose anyway and lose unsaved changes?", "Khoi's Kanban",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+            if (choice != DialogResult.Yes)
+                e.Cancel = true;
         }
 
         private void OnDeadlineTick()
         {
-            var changed = DeadlineService.ApplyRules(_data.Tasks, DateTime.Now);
-            // Overdue/remaining labels need refreshing every tick even without column changes.
-            RenderBoard();
-            if (changed)
-                _store.Save(_data);
+            // Rebuilding recreates every card (~12 window handles each), so only do it when a
+            // task actually moved column; otherwise just refresh the time-based text in place.
+            if (DeadlineService.ApplyRules(_data.Tasks, DateTime.Now))
+            {
+                RenderBoard();
+                SaveBoard();
+                return;
+            }
+
+            foreach (var col in _allColumns)
+                col.RefreshCards(_data.Theme);
         }
 
         private void AddTask(BoardColumn? presetColumn = null)
@@ -169,11 +196,10 @@ namespace KanbanDashboard.UI
 
             _data.Tasks.Add(task);
 
-            // Re-apply rules in case a deadline within 72 h / 24 h was just picked.
             DeadlineService.ApplyRules(_data.Tasks, DateTime.Now);
 
             RenderBoard();
-            _store.Save(_data);
+            SaveBoard();
         }
 
         private void EditTask(TaskItem task)
@@ -200,7 +226,7 @@ namespace KanbanDashboard.UI
 
             DeadlineService.ApplyRules(_data.Tasks, DateTime.Now);
             RenderBoard();
-            _store.Save(_data);
+            SaveBoard();
         }
 
         private void DeleteTask(TaskItem task)
@@ -212,10 +238,9 @@ namespace KanbanDashboard.UI
 
             _data.Tasks.Remove(task);
             RenderBoard();
-            _store.Save(_data);
+            SaveBoard();
         }
 
-        /// <summary>Handles the per-card "Done" checkbox: the only way a task reaches column 4.</summary>
         private void SetCompleted(TaskItem task, bool completed)
         {
             task.IsCompleted = completed;
@@ -227,14 +252,12 @@ namespace KanbanDashboard.UI
             else
             {
                 task.CompletedAt = null;
-                // Put it back somewhere sensible; DeadlineService will immediately
-                // re-escalate it if it's already close/overdue.
                 task.Column = BoardColumn.Chill;
                 DeadlineService.ApplyRules(_data.Tasks, DateTime.Now);
             }
 
             RenderBoard();
-            _store.Save(_data);
+            SaveBoard();
         }
 
         private void ClearDone()
@@ -255,7 +278,7 @@ namespace KanbanDashboard.UI
 
             _data.Tasks.RemoveAll(t => t.Column == BoardColumn.Done);
             RenderBoard();
-            _store.Save(_data);
+            SaveBoard();
         }
 
         private void EditTheme()
@@ -267,7 +290,7 @@ namespace KanbanDashboard.UI
             _data.Theme = dialog.ResultTheme;
             ApplyTheme();
             RenderBoard();
-            _store.Save(_data);
+            SaveBoard();
         }
 
         private void ApplyTheme()
@@ -309,19 +332,16 @@ namespace KanbanDashboard.UI
                 col.SetBackgroundColors(panel, text);
         }
 
-        /// <summary>Clears and rebuilds all four columns from the current task list. Cheap enough to call on every tick/edit.</summary>
         private void RenderBoard()
         {
             foreach (var col in _allColumns)
-                col.ClearCards();
+                col.BeginRebuild();
 
-            // Non-done columns: soonest deadline first so pressing tasks sit at the top.
             var nonDone = _data.Tasks
                 .Where(t => t.Column != BoardColumn.Done)
                 .OrderBy(t => t.DueAt ?? DateTime.MaxValue)
                 .ThenBy(t => t.CreatedAt);
 
-            // Done column: latest completed first so freshly-finished tasks appear at the top.
             var done = _data.Tasks
                 .Where(t => t.Column == BoardColumn.Done)
                 .OrderByDescending(t => t.CompletedAt ?? DateTime.MinValue)
@@ -333,6 +353,9 @@ namespace KanbanDashboard.UI
                 card.ApplyTheme(_data.Theme);
                 PanelFor(task.Column).AddCard(card);
             }
+
+            foreach (var col in _allColumns)
+                col.EndRebuild();
 
             foreach (var col in _allColumns)
                 col.UpdateHeaderCount(_data.Tasks.Count(t => t.Column == col.Column));

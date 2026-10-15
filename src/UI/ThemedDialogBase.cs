@@ -5,22 +5,14 @@ using KanbanDashboard.Services;
 
 namespace KanbanDashboard.UI
 {
-    /// <summary>
-    /// Shared base for the app's frameless, theme-aware modal dialogs.
-    /// Centralises palette resolution, drag-to-move, border painting and the
-    /// styled-button factory so <see cref="TaskEditDialog"/> and
-    /// <see cref="ThemeDialog"/> don't duplicate that infrastructure.
-    /// </summary>
     public abstract class ThemedDialogBase : Form
     {
-        // ── Palette ────────────────────────────────────────────────────────────
         protected readonly Color _bg;
         protected readonly Color _panel;
         protected readonly Color _text;
         protected readonly Color _accent;
         protected readonly Color _inputBg;
 
-        // ── Drag state ─────────────────────────────────────────────────────────
         private Point _dragStart;
         private bool  _isDragging;
 
@@ -52,8 +44,6 @@ namespace KanbanDashboard.UI
             ForeColor       = _text;
         }
 
-        // ── Drag-to-move ───────────────────────────────────────────────────────
-        /// <summary>Makes <paramref name="c"/> a grab-handle for moving this dialog.</summary>
         protected void MakeDraggable(Control c)
         {
             c.MouseDown += (_, e) =>
@@ -71,11 +61,6 @@ namespace KanbanDashboard.UI
             c.MouseUp += (_, _) => _isDragging = false;
         }
 
-        // ── Styled button factory ──────────────────────────────────────────────
-        /// <summary>
-        /// Creates a flat, themed button.
-        /// Pass <paramref name="accent"/>=true for the primary call-to-action.
-        /// </summary>
         protected Button CreateStyledButton(
             string text, Point location, int width, bool accent = false)
         {
@@ -99,7 +84,6 @@ namespace KanbanDashboard.UI
             return btn;
         }
 
-        // ── Thin border around the frameless window ────────────────────────────
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);

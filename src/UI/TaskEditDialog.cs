@@ -6,17 +6,13 @@ using KanbanDashboard.Services;
 
 namespace KanbanDashboard.UI
 {
-    /// <summary>
-    /// Modal dialog for creating a new task or editing an existing one.
-    /// Fully theme-aware so it matches the main window's dark aesthetic.
-    /// </summary>
     public class TaskEditDialog : ThemedDialogBase
     {
         private readonly TextBox        _titleBox;
         private readonly TextBox        _descriptionBox;
         private readonly CheckBox       _hasDeadlineBox;
-        private readonly DateTimePicker _deadlinePicker;
-        private readonly ComboBox       _columnBox;
+        private readonly WheelDateTimePicker _deadlinePicker;
+        private readonly ThemedDropDown _columnBox;
         private readonly Button         _okButton;
         private readonly Button         _cancelButton;
 
@@ -25,10 +21,6 @@ namespace KanbanDashboard.UI
         public DateTime?   Deadline        => _hasDeadlineBox.Checked ? _deadlinePicker.Value : (DateTime?)null;
         public BoardColumn SelectedColumn  => (BoardColumn)_columnBox.SelectedIndex;
 
-        /// <param name="dialogTitle">Window caption ("Add Task" or "Edit Task").</param>
-        /// <param name="existing">Non-null when editing an existing task.</param>
-        /// <param name="initialColumn">Pre-selected column for a quick-add from a column header.</param>
-        /// <param name="theme">The current AppTheme so the dialog can match it. Null = system defaults.</param>
         public TaskEditDialog(
             string dialogTitle,
             TaskItem existing = null,
@@ -37,13 +29,12 @@ namespace KanbanDashboard.UI
             : base(theme)
         {
             Text       = dialogTitle;
-            ClientSize = new Size(400, 380);
+            ClientSize = new Size(400, 530);
 
             const int headerH = 48;
             const int padX    = 20;
             const int ctrlW   = 360;
 
-            // ── Header bar ────────────────────────────────────────────────────
             var header = new Panel { Dock = DockStyle.Top, Height = headerH, BackColor = _panel };
             var headerLabel = new Label
             {
@@ -74,7 +65,6 @@ namespace KanbanDashboard.UI
             MakeDraggable(header);
             MakeDraggable(headerLabel);
 
-            // ── Body ──────────────────────────────────────────────────────────
             var body = new Panel
             {
                 Location   = new Point(0, headerH),
@@ -86,14 +76,12 @@ namespace KanbanDashboard.UI
 
             int y = 16;
 
-            // Title
             body.Controls.Add(MakeLabel("Title", padX, y));
             y += 20;
             _titleBox = MakeTextBox(padX, y, ctrlW);
             body.Controls.Add(_titleBox);
             y += 32;
 
-            // Description
             body.Controls.Add(MakeLabel("Description", padX, y));
             y += 20;
             _descriptionBox = new TextBox
@@ -111,7 +99,6 @@ namespace KanbanDashboard.UI
             body.Controls.Add(_descriptionBox);
             y += 86;
 
-            // Deadline checkbox + picker
             _hasDeadlineBox = new CheckBox
             {
                 Text      = "Has a deadline",
@@ -126,40 +113,38 @@ namespace KanbanDashboard.UI
             body.Controls.Add(_hasDeadlineBox);
             y += 26;
 
-            _deadlinePicker = new DateTimePicker
+            _deadlinePicker = new WheelDateTimePicker
             {
-                Location                  = new Point(padX, y),
-                Width                     = ctrlW,
-                Format                    = DateTimePickerFormat.Custom,
-                CustomFormat              = "MMM d, yyyy   h:mm tt",
-                Value                     = DateTime.Now.AddDays(1),
-                CalendarForeColor         = _text,
-                CalendarMonthBackground   = _panel,
-                CalendarTitleBackColor    = _panel,
-                CalendarTitleForeColor    = _text,
-                CalendarTrailingForeColor = ColorHelper.Soften(_text, 0.5f)
+                Location  = new Point(padX, y),
+                Width     = ctrlW,
+                Value     = DateTime.Now.AddDays(1),
+                BackColor = _bg,
+                ForeColor = _text
             };
             body.Controls.Add(_deadlinePicker);
-            y += 36;
+            y += _deadlinePicker.Height + 10;
 
-            // Column selector
             body.Controls.Add(MakeLabel("Starting column", padX, y));
             y += 20;
-            _columnBox = new ComboBox
+            var columnAccents = new[]
             {
-                Location      = new Point(padX, y),
-                Width         = ctrlW,
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                BackColor     = _inputBg,
-                ForeColor     = _text,
-                FlatStyle     = FlatStyle.Flat
+                ColorHelper.ParseHexOrDefault(theme?.UrgentColumnHex,      Color.IndianRed),
+                ColorHelper.ParseHexOrDefault(theme?.PrioritizedColumnHex, Color.Orange),
+                ColorHelper.ParseHexOrDefault(theme?.ChillColumnHex,       Color.SteelBlue),
+                ColorHelper.ParseHexOrDefault(theme?.DoneColumnHex,        Color.SeaGreen)
             };
-            _columnBox.Items.AddRange(new object[] { "Urgent", "Prioritized", "Chill", "Done" });
+            _columnBox = new ThemedDropDown(new[] { "Urgent", "Prioritized", "Chill", "Done" }, columnAccents)
+            {
+                Location   = new Point(padX, y),
+                Width      = ctrlW,
+                BackColor  = _bg,
+                FieldColor = _inputBg,
+                ForeColor  = _text
+            };
             _columnBox.SelectedIndex = 2;
             body.Controls.Add(_columnBox);
             y += 36;
 
-            // OK / Cancel
             _okButton = CreateStyledButton("Save", new Point(ClientSize.Width - 210, y), 90, accent: true);
             _okButton.DialogResult = DialogResult.OK;
             _okButton.Click += (_, _) =>
@@ -181,7 +166,6 @@ namespace KanbanDashboard.UI
             AcceptButton = _okButton;
             CancelButton = _cancelButton;
 
-            // ── Pre-fill for edit ─────────────────────────────────────────────
             if (existing != null)
             {
                 _titleBox.Text           = existing.Title;
@@ -200,8 +184,6 @@ namespace KanbanDashboard.UI
             Controls.Add(body);
             Controls.Add(header);
         }
-
-        // ── Helpers ────────────────────────────────────────────────────────────
 
         private Label MakeLabel(string text, int x, int y) => new Label
         {

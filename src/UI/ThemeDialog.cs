@@ -6,12 +6,6 @@ using KanbanDashboard.Services;
 
 namespace KanbanDashboard.UI
 {
-    /// <summary>
-    /// Lets the user type in hex color codes for the app background and each
-    /// column/card element. Defaults to (and can be reset back to) Catppuccin Frappé.
-    /// Fully theme-aware: colors are applied from the current AppTheme so it
-    /// matches the main window instead of looking like a plain system dialog.
-    /// </summary>
     public class ThemeDialog : ThemedDialogBase
     {
         public AppTheme ResultTheme { get; private set; }
@@ -45,14 +39,13 @@ namespace KanbanDashboard.UI
             const int swW     = 28;
             const int padX    = 20;
             const int headerH = 48;
-            const int bodyPad = 16;  // top padding inside body
-            const int btnRowH = 40;  // preset buttons row height
-            const int okRowH  = 42;  // OK/Cancel row height
-            const int bottomP = 20;  // bottom padding
+            const int bodyPad = 16;
+            const int btnRowH = 40;
+            const int okRowH  = 42;
+            const int bottomP = 20;
             int totalH = headerH + bodyPad + _fields.Length * rowH + btnRowH + okRowH + bottomP;
             ClientSize = new Size(420, totalH);
 
-            // ── Draggable header bar ────────────────────────────────────────────
             var header = new Panel
             {
                 Dock      = DockStyle.Top,
@@ -88,14 +81,13 @@ namespace KanbanDashboard.UI
             MakeDraggable(header);
             MakeDraggable(headerLabel);
 
-            // ── Body ────────────────────────────────────────────────────────────
             var body = new Panel
             {
                 Location   = new Point(0, headerH),
                 Width      = ClientSize.Width,
                 Height     = ClientSize.Height - headerH,
                 BackColor  = _bg,
-                AutoScroll = false  // tall enough to show everything without scrolling
+                AutoScroll = false
             };
 
             _hexBoxes = new TextBox[_fields.Length];
@@ -157,7 +149,6 @@ namespace KanbanDashboard.UI
                 body.Controls.Add(swatch);
             }
 
-            // ── Preset buttons ─────────────────────────────────────────────────
             int btnY = yOff + _fields.Length * rowH + 10;
 
             var frappeBtn = CreateStyledButton("Frappe (dark)", new Point(padX, btnY), 130);
@@ -166,7 +157,6 @@ namespace KanbanDashboard.UI
             var daybreakBtn = CreateStyledButton("Daybreak (light)", new Point(padX + 142, btnY), 130);
             daybreakBtn.Click += (_, _) => ApplyThemeToFields(AppTheme.SoftDaybreak());
 
-            // ── OK / Cancel ────────────────────────────────────────────────────
             int okY = btnY + 42;
 
             var okButton = CreateStyledButton("Apply", new Point(ClientSize.Width - 200, okY), 84, accent: true);
@@ -199,10 +189,8 @@ namespace KanbanDashboard.UI
             body.Controls.Add(cancelButton);
 
             Controls.Add(body);
-            Controls.Add(header);  // on top so it paints over body's top edge
+            Controls.Add(header);
         }
-
-        // ── Helpers ────────────────────────────────────────────────────────────
 
         private void ApplyThemeToFields(AppTheme theme)
         {

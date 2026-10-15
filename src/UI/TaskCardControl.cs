@@ -7,13 +7,6 @@ using KanbanDashboard.Services;
 
 namespace KanbanDashboard.UI
 {
-    /// <summary>
-    /// Visual representation of a single <see cref="TaskItem"/>: a rounded card with
-    /// a colored status pill, title, optional description, a time-to-deadline
-    /// progress bar, and a footer with the due-status text + a round "done" toggle.
-    /// Built entirely in code (no designer file), using Dock-based layout so it
-    /// stretches cleanly to whatever width the column gives it.
-    /// </summary>
     public class TaskCardControl : Panel
     {
         public TaskItem Task { get; private set; }
@@ -41,6 +34,17 @@ namespace KanbanDashboard.UI
         private readonly ToggleDoneButton _toggleButton;
 
         private Color _accent = Color.Gray;
+        private bool  _styledAsOverdue;
+
+        // Shared by every card: a re-render recreates all cards, so per-card fonts would
+        // allocate (and leak) several GDI font handles each time.
+        private static readonly Font KebabFont       = new("Segoe UI", 10f, FontStyle.Bold);
+        private static readonly Font TitleFont       = new("Segoe UI", 10.5f, FontStyle.Bold);
+        private static readonly Font DescriptionFont = new("Segoe UI", 8.5f);
+        private static readonly Font PercentFont     = new("Segoe UI", 8f);
+        private static readonly Font StatusFont      = new("Segoe UI", 8.5f);
+        private static readonly Font PillFont        = new("Segoe UI", 7.75f, FontStyle.Bold);
+        private static readonly Font ToggleFont      = new("Segoe UI", 9f, FontStyle.Bold);
 
         public TaskCardControl(TaskItem task)
         {
@@ -54,24 +58,23 @@ namespace KanbanDashboard.UI
             Padding = new Padding(14, 12, 14, 12);
             Cursor = Cursors.Hand;
 
-            // ---------- header: status pill (left) + kebab menu button (right) ----------
             _headerRow = new Panel { Dock = DockStyle.Top, Height = 26, BackColor = Color.Transparent };
 
             _statusPill = new Pill { Dock = DockStyle.Left, Width = 92, Height = 22 };
 
             _kebabMenu = new ContextMenuStrip();
-            _kebabMenu.Items.Add("Edit", null, (_, _) => EditRequested?.Invoke(this, EventArgs.Empty));
-            _kebabMenu.Items.Add("Delete", null, (_, _) => DeleteRequested?.Invoke(this, EventArgs.Empty));
+            _kebabMenu.Items.Add("Edit", null, (_, _) => RaiseAfterInput(EditRequested));
+            _kebabMenu.Items.Add("Delete", null, (_, _) => RaiseAfterInput(DeleteRequested));
 
             _kebabButton = new Button
             {
                 Dock = DockStyle.Right,
                 Width = 26,
-                Text = "\u22EF", // horizontal ellipsis, reads as a "..." kebab menu
+                Text = "\u22EF",
                 FlatStyle = FlatStyle.Flat,
                 TabStop = false,
                 Cursor = Cursors.Hand,
-                Font = new Font("Segoe UI", 10f, FontStyle.Bold)
+                Font = KebabFont
             };
             _kebabButton.FlatAppearance.BorderSize = 0;
             _kebabButton.Click += (_, _) => _kebabMenu.Show(_kebabButton, new Point(0, _kebabButton.Height));
@@ -79,51 +82,47 @@ namespace KanbanDashboard.UI
             _headerRow.Controls.Add(_statusPill);
             _headerRow.Controls.Add(_kebabButton);
 
-            // ---------- title ----------
             _titleLabel = new Label
             {
                 Dock = DockStyle.Top,
                 Height = 24,
                 AutoEllipsis = true,
                 TextAlign = ContentAlignment.BottomLeft,
-                Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
+                Font = TitleFont,
                 BackColor = Color.Transparent
             };
 
-            // ---------- description (collapses to 0 height if there's none) ----------
             _descriptionLabel = new Label
             {
                 Dock = DockStyle.Top,
                 Height = hasDescription ? 20 : 0,
                 AutoEllipsis = true,
                 TextAlign = ContentAlignment.TopLeft,
-                Font = new Font("Segoe UI", 8.5f),
+                Font = DescriptionFont,
                 BackColor = Color.Transparent,
                 Visible = hasDescription
             };
 
-            // ---------- time-to-deadline progress bar ----------
             _progressRow = new Panel { Dock = DockStyle.Top, Height = 26, BackColor = Color.Transparent };
             _progressPercentLabel = new Label
             {
                 Dock = DockStyle.Right,
                 Width = 42,
                 TextAlign = ContentAlignment.MiddleRight,
-                Font = new Font("Segoe UI", 8f),
+                Font = PercentFont,
                 BackColor = Color.Transparent
             };
             _progressTrack = new ProgressTrack { Dock = DockStyle.Fill, Margin = new Padding(0, 8, 6, 8) };
             _progressRow.Controls.Add(_progressTrack);
             _progressRow.Controls.Add(_progressPercentLabel);
 
-            // ---------- footer: due-status text (left) + round done toggle (right) ----------
             _footerRow = new Panel { Dock = DockStyle.Top, Height = 26, BackColor = Color.Transparent };
             _statusLabel = new Label
             {
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
                 AutoEllipsis = true,
-                Font = new Font("Segoe UI", 8.5f),
+                Font = StatusFont,
                 BackColor = Color.Transparent
             };
             _toggleButton = new ToggleDoneButton { Dock = DockStyle.Right, Width = 26, Height = 26 };
@@ -132,33 +131,67 @@ namespace KanbanDashboard.UI
                 if (e.Button == MouseButtons.Left)
                 {
                     bool newState = !Task.IsCompleted;
-                    CompletedChanged?.Invoke(this, newState);
+                    RaiseAfterInput(() => CompletedChanged?.Invoke(this, newState));
                 }
             };
             _footerRow.Controls.Add(_statusLabel);
             _footerRow.Controls.Add(_toggleButton);
 
-            // Add order is the reverse of visual top-to-bottom order: Panel's docking
-            // engine processes the LAST added control first, so it claims the topmost
-            // slice. Adding footer -> progress -> description -> title -> header means
-            // header ends up on top, footer on bottom - the order you'd read them in.
             Controls.Add(_footerRow);
             Controls.Add(_progressRow);
             Controls.Add(_descriptionLabel);
             Controls.Add(_titleLabel);
             Controls.Add(_headerRow);
 
-            DoubleClick += (_, _) => EditRequested?.Invoke(this, EventArgs.Empty);
-            _titleLabel.DoubleClick += (_, _) => EditRequested?.Invoke(this, EventArgs.Empty);
+            DoubleClick += (_, _) => RaiseAfterInput(EditRequested);
+            _titleLabel.DoubleClick += (_, _) => RaiseAfterInput(EditRequested);
 
-            Height = 24 /*padding*/ + 26 /*header*/ + 24 /*title*/ + (hasDescription ? 20 : 0) + 26 /*progress*/ + 26 /*footer*/;
+            Height = 24 + 26 + 24 + (hasDescription ? 20 : 0) + 26 + 26;
 
             Resize += (_, _) => UpdateRoundedRegion();
 
             RefreshFromTask();
         }
 
-        /// <summary>Re-reads the underlying TaskItem and updates all visible text/colors/progress.</summary>
+        private void RaiseAfterInput(EventHandler handler) =>
+            RaiseAfterInput(() => handler?.Invoke(this, EventArgs.Empty));
+
+        // Handlers re-render the board, which removes and disposes this card. Posting the
+        // event lets the current click / menu interaction finish before that happens.
+        private void RaiseAfterInput(Action raise)
+        {
+            if (IsHandleCreated && !IsDisposed)
+                BeginInvoke(raise);
+            else
+                raise();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _kebabMenu.Dispose();
+
+                var region = Region;
+                Region = null;
+                region?.Dispose();
+            }
+            base.Dispose(disposing);
+        }
+
+        /// <summary>
+        /// Cheap per-minute update: refreshes the countdown and progress, and re-applies the
+        /// theme only when the task has just become overdue (the one time-driven style change).
+        /// </summary>
+        public void RefreshTimeDependent(AppTheme theme)
+        {
+            _statusLabel.Text = BuildStatusText();
+            UpdateProgress();
+
+            if (Task.IsOverdue != _styledAsOverdue)
+                ApplyTheme(theme);
+        }
+
         public void RefreshFromTask()
         {
             _titleLabel.Text = string.IsNullOrWhiteSpace(Task.Title) ? "(untitled)" : Task.Title;
@@ -193,7 +226,7 @@ namespace KanbanDashboard.UI
             if (!Task.DueAt.HasValue)
             {
                 _progressTrack.Percent = 0;
-                _progressPercentLabel.Text = "\u2014"; // em dash: nothing to show
+                _progressPercentLabel.Text = "\u2014";
                 return;
             }
 
@@ -210,10 +243,8 @@ namespace KanbanDashboard.UI
 
             _progressTrack.Percent = pct;
             _progressPercentLabel.Text = $"{(int)(pct * 100)}%";
-            _progressTrack.Invalidate();
         }
 
-        /// <summary>Applies the theme's colors, plus the mild green/red "Done" vibe and the status pill's accent.</summary>
         public void ApplyTheme(AppTheme theme)
         {
             var baseColor = ColorHelper.ParseHexOrDefault(theme.CardBackgroundHex, Color.Gainsboro);
@@ -227,13 +258,10 @@ namespace KanbanDashboard.UI
             {
                 var vibeHex  = Task.WasCompletedLate ? theme.DoneLateHex : theme.DoneSuccessHex;
                 var vibe     = ColorHelper.ParseHexOrDefault(vibeHex, baseColor);
-                background   = ColorHelper.Soften(vibe, 0.75f); // mild tint, not a solid block
+                background   = ColorHelper.Soften(vibe, 0.75f);
                 accent       = vibe;
                 pillText     = Task.WasCompletedLate ? "Late" : "Done";
 
-                // After softening, the background may be much lighter than the theme's
-                // text color (which is usually light in dark themes).  Pick whichever of
-                // black / white gives better contrast so text is always readable.
                 textColor = ColorHelper.ContrastColor(background);
             }
             else if (Task.IsOverdue)
@@ -243,13 +271,13 @@ namespace KanbanDashboard.UI
                 accent     = red;
                 pillText   = "Overdue";
 
-                // Same contrast fix for overdue tints in dark themes.
                 textColor = ColorHelper.ContrastColor(background);
             }
 
             var mutedText = ColorHelper.Soften(textColor, 0.25f);
 
-            BackColor = background;
+            BackColor        = background;
+            _styledAsOverdue = Task.IsOverdue;
             _accent   = accent;
 
             _statusPill.SetColors(accent);
@@ -306,7 +334,6 @@ namespace KanbanDashboard.UI
             e.Graphics.DrawPath(pen, path);
         }
 
-        /// <summary>Small rounded "pill" badge used for the column/status label at the top of a card.</summary>
         private class Pill : Panel
         {
             private Color _fill = Color.Gray;
@@ -315,7 +342,7 @@ namespace KanbanDashboard.UI
             public Pill()
             {
                 SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
-                Font = new Font("Segoe UI", 7.75f, FontStyle.Bold);
+                Font = PillFont;
             }
 
             public void SetColors(Color accent)
@@ -336,10 +363,20 @@ namespace KanbanDashboard.UI
             }
         }
 
-        /// <summary>Thin rounded progress track that fills left-to-right based on <see cref="Percent"/>.</summary>
         private class ProgressTrack : Panel
         {
-            public float Percent { get; set; }
+            private float _percent;
+
+            public float Percent
+            {
+                get => _percent;
+                set
+                {
+                    if (_percent == value) return;
+                    _percent = value;
+                    Invalidate();
+                }
+            }
             public Color TrackColor { get; set; } = Color.LightGray;
             public Color FillColor { get; set; } = Color.Gray;
 
@@ -371,7 +408,6 @@ namespace KanbanDashboard.UI
             }
         }
 
-        /// <summary>Small circular toggle that fills with the accent colour when done.</summary>
         private class ToggleDoneButton : Panel
         {
             public Color AccentColor { get; set; } = Color.Gray;
@@ -385,16 +421,14 @@ namespace KanbanDashboard.UI
 
             public ToggleDoneButton()
             {
-                // Panel has no OS-level text/button rendering — nothing can bleed through.
                 SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint
                        | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
                 Cursor = Cursors.Hand;
-                Font   = new Font("Segoe UI", 9f, FontStyle.Bold);
+                Font   = ToggleFont;
             }
 
             protected override void OnPaintBackground(PaintEventArgs e)
             {
-                // Fill corners with the card's background so nothing bleeds through.
                 Control c = Parent;
                 while (c != null && (c.BackColor == Color.Transparent || c.BackColor.A == 0))
                     c = c.Parent;

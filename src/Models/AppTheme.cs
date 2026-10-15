@@ -1,28 +1,22 @@
 namespace KanbanDashboard.Models
 {
-    /// <summary>
-    /// All user-customizable colors, stored as hex strings ("#RRGGBB") so they
-    /// serialize cleanly to JSON and round-trip through the theme editor's textboxes.
-    /// Defaults to Catppuccin Frappe.
-    /// </summary>
     public class AppTheme
     {
-        public string BackgroundHex { get; set; } = "#303446";   // Base
-        public string PanelHex { get; set; } = "#292c3c";        // Mantle
-        public string CardBackgroundHex { get; set; } = "#414559"; // Surface0
-        public string TextHex { get; set; } = "#c6d0f5";         // Text
+        public string BackgroundHex { get; set; } = "#303446";
+        public string PanelHex { get; set; } = "#292c3c";
+        public string CardBackgroundHex { get; set; } = "#414559";
+        public string TextHex { get; set; } = "#c6d0f5";
 
-        public string UrgentColumnHex { get; set; } = "#e78284";       // Red
-        public string PrioritizedColumnHex { get; set; } = "#ef9f76";  // Peach
-        public string ChillColumnHex { get; set; } = "#8caaee";        // Blue
-        public string DoneColumnHex { get; set; } = "#a6d189";         // Green
+        public string UrgentColumnHex { get; set; } = "#e78284";
+        public string PrioritizedColumnHex { get; set; } = "#ef9f76";
+        public string ChillColumnHex { get; set; } = "#8caaee";
+        public string DoneColumnHex { get; set; } = "#a6d189";
 
-        public string DoneSuccessHex { get; set; } = "#a6d189"; // mild green vibe (on-time)
-        public string DoneLateHex { get; set; } = "#e78284";    // mild red vibe (past deadline)
+        public string DoneSuccessHex { get; set; } = "#a6d189";
+        public string DoneLateHex { get; set; } = "#e78284";
 
         public static AppTheme CatppuccinFrappe() => new AppTheme();
 
-        /// <summary>A light, airy pastel theme (mint/white) in the spirit of the reference mockup.</summary>
         public static AppTheme SoftDaybreak() => new AppTheme
         {
             BackgroundHex = "#EAF3EF",

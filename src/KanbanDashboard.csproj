@@ -11,47 +11,22 @@
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationIcon>app.ico</ApplicationIcon>
     <Platforms>x64</Platforms>
-    <!-- Listed here so `dotnet publish -r win-x64` (see README) can restore without
-         extra flags. This does NOT force normal F5/Debug builds to become
-         self-contained - that's controlled separately below. -->
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
 
-    <!-- ===== Resource-usage tuning (low CPU / low RAM) ===== -->
-    <!-- Workstation GC (not Server GC) uses far less memory for a small UI app -->
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
-    <!-- Quick JIT keeps startup CPU burst low; we don't need max steady-state throughput -->
     <TieredCompilation>true</TieredCompilation>
     <TieredPGO>false</TieredPGO>
-    <!-- Left OFF (not InvariantGlobalization=true): that mode saves a little startup
-         time/memory, but it breaks any native Win32 control - like the DateTimePicker
-         in the Add Task dialog - that needs to read the OS's actual locale (e.g. on a
-         non-English Windows install). Correctness wins over the minor saving here. -->
     <InvariantGlobalization>false</InvariantGlobalization>
-    <!-- Only ship English satellite resource assemblies (translated .NET/WinForms
-         error-message strings) instead of one folder per supported language -
-         that's what those cs/de/es/fr/... folders in the publish output are. -->
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
-    <!-- NOTE: WinForms relies heavily on reflection, so PublishTrimmed is intentionally
-         NOT enabled here - trimming a WinForms app is unsupported by Microsoft and will
-         break at runtime (missing types/designers). Leave this off. -->
     <PublishTrimmed>false</PublishTrimmed>
   </PropertyGroup>
 
-  <!-- Self-contained / single-file settings are intentionally NOT hardcoded here -
-       putting them in the .csproj would make every normal F5 Debug build produce a
-       full self-contained win-x64 output, which is slow and unnecessary while
-       developing. Instead, pass them explicitly at publish time - see README.md
-       section 5 for the exact command / Visual Studio Publish steps. -->
-
   <ItemGroup>
-    <!-- A ready-made publish profile so Visual Studio's Publish dialog ("Folder" ->
-         this profile) already has the right settings pre-filled. -->
     <None Include="Properties\PublishProfiles\win-x64-standalone.pubxml" Condition="Exists('Properties\PublishProfiles\win-x64-standalone.pubxml')" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Persist app data (tasks + theme) as JSON next to the exe's AppData folder -->
     <PackageReference Include="System.Text.Json" Version="8.0.5" />
   </ItemGroup>
 

@@ -7,10 +7,6 @@ using KanbanDashboard.Services;
 
 namespace KanbanDashboard.UI
 {
-    /// <summary>
-    /// Partial class split purely for readability: this file only builds and
-    /// arranges controls. All behavior/logic lives in MainForm.cs.
-    /// </summary>
     public partial class MainForm
     {
         private Panel      _topBar;
@@ -27,7 +23,6 @@ namespace KanbanDashboard.UI
         private ColumnPanel _chillColumn;
         private ColumnPanel _doneColumn;
 
-        /// <summary>Ordered left-to-right; avoids rebuilding the array on every loop.</summary>
         private ColumnPanel[] _allColumns;
 
         private void BuildLayout()
@@ -37,14 +32,11 @@ namespace KanbanDashboard.UI
             MinimumSize     = new Size(900, 500);
             Size            = new Size(1240, 760);
             Font            = new Font("Segoe UI", 9f);
-            FormBorderStyle = FormBorderStyle.None;  // headerless – no OS title bar
-            // Reduces flicker/CPU spent redrawing the whole form on resize.
+            FormBorderStyle = FormBorderStyle.None;
             SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
 
-            // ── Top bar ──────────────────────────────────────────────────────
             _topBar = new Panel { Dock = DockStyle.Top, Height = 64, Padding = new Padding(20, 0, 20, 0) };
 
-            // Greeting label (left)
             _appTitleLabel = new Label
             {
                 Dock      = DockStyle.Left,
@@ -55,7 +47,6 @@ namespace KanbanDashboard.UI
                 Text      = "Welcome back, Khoi!"
             };
 
-            // Digital clock (right of greeting, fills remaining left space)
             _clockLabel = new Label
             {
                 Dock      = DockStyle.Left,
@@ -66,7 +57,6 @@ namespace KanbanDashboard.UI
                 Text      = DateTime.Now.ToString("HH:mm:ss")
             };
 
-            // Right-side controls panel
             var rightControls = new FlowLayoutPanel
             {
                 Dock          = DockStyle.Right,
@@ -117,7 +107,6 @@ namespace KanbanDashboard.UI
             _topBar.Controls.Add(_clockLabel);
             _topBar.Controls.Add(_appTitleLabel);
 
-            // ── Board ────────────────────────────────────────────────────────
             _boardLayout = new TableLayoutPanel
             {
                 Dock        = DockStyle.Fill,
@@ -154,7 +143,6 @@ namespace KanbanDashboard.UI
             _ => throw new ArgumentOutOfRangeException(nameof(column))
         };
 
-        /// <summary>Rounded, filled "call to action" button used for "+ Add Task".</summary>
         private class PillButton : Button
         {
             public PillButton()

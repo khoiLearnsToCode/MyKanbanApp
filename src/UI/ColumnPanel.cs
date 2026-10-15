@@ -7,11 +7,6 @@ using KanbanDashboard.Services;
 
 namespace KanbanDashboard.UI
 {
-    /// <summary>
-    /// One column of the board: a header with a colored status dot + title + count,
-    /// a quick-add button, a thin accent underline, then a scrollable stack of
-    /// <see cref="TaskCardControl"/>s with a custom themed scrollbar.
-    /// </summary>
     public class ColumnPanel : Panel
     {
         public BoardColumn Column { get; }
@@ -61,7 +56,21 @@ namespace KanbanDashboard.UI
             _cardsPanel.SetScrollColors(panelBackground, headerText);
         }
 
-        public void ClearCards() => _cardsPanel.ClearCards();
+        /// <summary>Removes all cards; call <see cref="EndRebuild"/> after adding the new ones.</summary>
+        public void BeginRebuild()
+        {
+            _cardsPanel.BeginRebuild();
+            _cardsPanel.ClearCards();
+        }
+
+        public void EndRebuild() => _cardsPanel.EndRebuild();
+
+        /// <summary>Updates countdowns, progress and overdue styling without recreating cards.</summary>
+        public void RefreshCards(AppTheme theme)
+        {
+            foreach (var card in _cardsPanel.Cards)
+                card.RefreshTimeDependent(theme);
+        }
 
         public void AddCard(TaskCardControl card)
         {
@@ -83,11 +92,6 @@ namespace KanbanDashboard.UI
             _headerPanel.Text = title;
         }
 
-        // ── Themed scroll panel ──────────────────────────────────────────────────
-        /// <summary>
-        /// Replaces the native OS scrollbar with a thin, rounded, Catppuccin-coloured
-        /// track+thumb. Scrolling is done by offsetting a FlowLayoutPanel's Top position.
-        /// </summary>
         private class ThemedScrollPanel : Panel
         {
             private readonly FlowLayoutPanel _content;
@@ -99,9 +103,14 @@ namespace KanbanDashboard.UI
             private int  _dragAnchorY;
             private int  _dragAnchorScroll;
 
-            private const int BarW      = 5;   // thumb / track width
-            private const int BarRight  = 4;   // gap from right edge of panel
-            private const int MinThumb  = 22;  // minimum thumb height
+            // While rebuilding, per-card scroll recalculation is skipped (it is O(n) per
+            // add/remove) and the scroll position is restored afterwards.
+            private bool _rebuilding;
+            private int  _scrollBeforeRebuild;
+
+            private const int BarW     = 5;
+            private const int BarRight = 4;
+            private const int MinThumb = 22;
 
             public Color ContentBackColor
             {
@@ -124,7 +133,6 @@ namespace KanbanDashboard.UI
                 _track = new Panel { Visible = false };
                 _thumb = new Panel { Cursor  = Cursors.Hand };
 
-                // ── Thumb drag ────────────────────────────────────────────
                 _thumb.MouseDown += (_, e) =>
                 {
                     if (e.Button != MouseButtons.Left) return;
@@ -143,7 +151,6 @@ namespace KanbanDashboard.UI
                 };
                 _thumb.MouseUp += (_, _) => _dragging = false;
 
-                // ── Track click (page up/down) ────────────────────────────
                 _track.MouseDown += (_, e) =>
                 {
                     if (e.Y < _thumb.Top) ApplyScroll(_scrollPx - Height);
@@ -155,37 +162,77 @@ namespace KanbanDashboard.UI
                 Controls.Add(_track);
 
                 Resize += (_, _) => Relayout();
-                _content.ControlAdded   += (_, _) => RefreshScroll();
-                _content.ControlRemoved += (_, _) => RefreshScroll();
+                _content.ControlAdded   += (_, _) => { if (!_rebuilding) RefreshScroll(); };
+                _content.ControlRemoved += (_, _) => { if (!_rebuilding) RefreshScroll(); };
             }
-
-            // ── Public API ────────────────────────────────────────────────
 
             public void SetScrollColors(Color panelBg, Color text)
             {
-                // Track: slightly lighter than the panel background
-                // Thumb: 40% of the way from panel toward text — visible but muted
                 _track.BackColor = ColorHelper.Soften(panelBg, 0.10f);
                 _thumb.BackColor = ColorHelper.Blend(panelBg, text, 0.40f);
                 RefreshThumbRegion();
             }
 
+            public IEnumerable<TaskCardControl> Cards => _content.Controls.OfType<TaskCardControl>();
+
+            public void BeginRebuild()
+            {
+                _rebuilding          = true;
+                _scrollBeforeRebuild = _scrollPx;
+                _content.SuspendLayout();
+            }
+
+            public void EndRebuild()
+            {
+                _content.ResumeLayout(true);
+                _rebuilding = false;
+                RefreshScroll();
+                ApplyScroll(_scrollBeforeRebuild);
+            }
+
             public void ClearCards()
             {
+                var oldCards = new Control[_content.Controls.Count];
+                _content.Controls.CopyTo(oldCards, 0);
+
                 _content.Controls.Clear();
-                _scrollPx = 0;
-                RefreshScroll();
+                if (!_rebuilding)
+                {
+                    _scrollPx = 0;
+                    RefreshScroll();
+                }
+
+                DisposeDeferred(oldCards);
+            }
+
+            // Controls.Clear() does not dispose, so removed cards would leak their window
+            // handles. Disposal is posted rather than done inline because a re-render can be
+            // triggered from inside one of these cards' own event handlers.
+            private void DisposeDeferred(Control[] controls)
+            {
+                if (controls.Length == 0)
+                    return;
+
+                if (!IsHandleCreated || IsDisposed)
+                {
+                    foreach (var c in controls)
+                        c.Dispose();
+                    return;
+                }
+
+                BeginInvoke(new Action(() =>
+                {
+                    foreach (var c in controls)
+                        c.Dispose();
+                }));
             }
 
             public void AddCard(TaskCardControl card)
             {
                 card.Width = AvailableCardWidth();
-                // Forward wheel events from every control on the card to this panel
                 HookMouseWheel(card);
                 _content.Controls.Add(card);
             }
-
-            // ── Scrolling ─────────────────────────────────────────────────
 
             protected override void OnMouseWheel(MouseEventArgs e)
             {
@@ -211,22 +258,17 @@ namespace KanbanDashboard.UI
                 UpdateThumb();
             }
 
-            // ── Layout ────────────────────────────────────────────────────
-
             private void Relayout()
             {
-                // Content occupies the full width minus room for the scroll track
                 _content.Left  = 0;
                 _content.Width = Math.Max(Width - BarW - BarRight - 2, 100);
                 _content.Top   = -_scrollPx;
 
-                // Track: thin strip on the right edge, inset top/bottom slightly
                 _track.Left   = Width - BarW - BarRight;
                 _track.Top    = 6;
                 _track.Width  = BarW;
                 _track.Height = Math.Max(Height - 12, 0);
 
-                // Resize all existing cards to the new width
                 int w = AvailableCardWidth();
                 foreach (Control c in _content.Controls)
                     c.Width = w;
@@ -238,13 +280,11 @@ namespace KanbanDashboard.UI
             {
                 int total = TotalContentHeight();
 
-                // Ensure content panel is tall enough to contain all cards
                 _content.Height = Math.Max(total, Height);
 
                 bool needsBar = total > Height;
                 _track.Visible = needsBar;
 
-                // Clamp scroll in case content shrank
                 int max = Math.Max(0, total - Height);
                 if (_scrollPx > max) ApplyScroll(max);
 
@@ -282,8 +322,6 @@ namespace KanbanDashboard.UI
                 old?.Dispose();
             }
 
-            // ── Helpers ───────────────────────────────────────────────────
-
             private int TotalContentHeight()
             {
                 int h = _content.Padding.Vertical;
@@ -296,8 +334,6 @@ namespace KanbanDashboard.UI
                 Math.Max(_content.Width - _content.Padding.Horizontal - 2, 140);
         }
 
-        // ── DotHeaderPanel ───────────────────────────────────────────────────────
-        /// <summary>Header row: colored status dot, title+count text, and a small "+" quick-add button.</summary>
         private class DotHeaderPanel : Panel
         {
             public Color  DotColor  { get; set; } = Color.Gray;
