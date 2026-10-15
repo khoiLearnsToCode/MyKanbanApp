@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
@@ -46,9 +47,6 @@ namespace KanbanDashboard.UI
 
             foreach (var col in _allColumns)
             {
-                col.EditRequested     += (_, task)   => EditTask(task);
-                col.DeleteRequested   += (_, task)   => DeleteTask(task);
-                col.CompletedChanged  += (_, args)   => SetCompleted(args.Task, args.Completed);
                 col.QuickAddRequested += (_, column) => AddTask(column);
             }
 
@@ -71,6 +69,16 @@ namespace KanbanDashboard.UI
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern IntPtr SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool RedrawWindow(IntPtr hWnd, IntPtr rect, IntPtr region, uint flags);
+
+        private const int  WM_SETREDRAW     = 0x000B;
+        private const uint RDW_INVALIDATE   = 0x0001;
+        private const uint RDW_ERASE        = 0x0004;
+        private const uint RDW_ALLCHILDREN  = 0x0080;
+        private const uint RDW_UPDATENOW    = 0x0100;
+        private const uint RDW_FRAME        = 0x0400;
 
         private void OnTopBarMouseDown(object sender, MouseEventArgs e)
         {
@@ -332,34 +340,88 @@ namespace KanbanDashboard.UI
                 col.SetBackgroundColors(panel, text);
         }
 
+        // One card per task, kept across renders so an add/edit/move only touches what changed.
+        private readonly Dictionary<TaskItem, TaskCardControl> _cards = new();
+
+        /// <summary>
+        /// Brings the columns in line with <see cref="_data"/>: creates cards only for new tasks,
+        /// disposes cards of removed tasks, and moves/reorders/restyles the rest in place. Drawing
+        /// is frozen meanwhile and the board is painted once at the end, so nothing flickers.
+        /// </summary>
         private void RenderBoard()
         {
-            foreach (var col in _allColumns)
-                col.BeginRebuild();
+            bool freeze = _boardLayout.IsHandleCreated;
+            if (freeze)
+                SendMessage(_boardLayout.Handle, WM_SETREDRAW, 0, 0);
 
-            var nonDone = _data.Tasks
-                .Where(t => t.Column != BoardColumn.Done)
-                .OrderBy(t => t.DueAt ?? DateTime.MaxValue)
-                .ThenBy(t => t.CreatedAt);
-
-            var done = _data.Tasks
-                .Where(t => t.Column == BoardColumn.Done)
-                .OrderByDescending(t => t.CompletedAt ?? DateTime.MinValue)
-                .ThenByDescending(t => t.CreatedAt);
-
-            foreach (var task in nonDone.Concat(done))
+            try
             {
-                var card = new TaskCardControl(task);
-                card.ApplyTheme(_data.Theme);
-                PanelFor(task.Column).AddCard(card);
+                var live = new HashSet<TaskItem>(_data.Tasks);
+                var removed = _cards.Keys.Where(t => !live.Contains(t)).ToList();
+                foreach (var task in removed)
+                {
+                    var card = _cards[task];
+                    _cards.Remove(task);
+                    card.Parent?.Controls.Remove(card);
+                    DisposeLater(card);
+                }
+
+                var nonDone = _data.Tasks
+                    .Where(t => t.Column != BoardColumn.Done)
+                    .OrderBy(t => t.DueAt ?? DateTime.MaxValue)
+                    .ThenBy(t => t.CreatedAt);
+
+                var done = _data.Tasks
+                    .Where(t => t.Column == BoardColumn.Done)
+                    .OrderByDescending(t => t.CompletedAt ?? DateTime.MinValue)
+                    .ThenByDescending(t => t.CreatedAt);
+
+                var perColumn = _allColumns.ToDictionary(c => c.Column, _ => new List<TaskCardControl>());
+                foreach (var task in nonDone.Concat(done))
+                {
+                    if (_cards.TryGetValue(task, out var card))
+                        card.RefreshFromTask();
+                    else
+                        _cards[task] = card = CreateCard(task);
+
+                    card.ApplyTheme(_data.Theme);
+                    perColumn[task.Column].Add(card);
+                }
+
+                foreach (var col in _allColumns) col.BeginUpdate();
+                foreach (var col in _allColumns) col.SetCards(perColumn[col.Column]);
+                foreach (var col in _allColumns) col.EndUpdate();
+
+                foreach (var col in _allColumns)
+                    col.UpdateHeaderCount(perColumn[col.Column].Count);
             }
-
-            foreach (var col in _allColumns)
-                col.EndRebuild();
-
-            foreach (var col in _allColumns)
-                col.UpdateHeaderCount(_data.Tasks.Count(t => t.Column == col.Column));
+            finally
+            {
+                if (freeze)
+                {
+                    SendMessage(_boardLayout.Handle, WM_SETREDRAW, 1, 0);
+                    RedrawWindow(_boardLayout.Handle, IntPtr.Zero, IntPtr.Zero,
+                        RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+                }
+            }
         }
 
+        private TaskCardControl CreateCard(TaskItem task)
+        {
+            var card = new TaskCardControl(task);
+            card.EditRequested    += (_, _)         => EditTask(card.Task);
+            card.DeleteRequested  += (_, _)         => DeleteTask(card.Task);
+            card.CompletedChanged += (_, completed) => SetCompleted(card.Task, completed);
+            return card;
+        }
+
+        // Posted so a card is never disposed while one of its own handlers is still running.
+        private void DisposeLater(Control control)
+        {
+            if (IsHandleCreated)
+                BeginInvoke(new Action(control.Dispose));
+            else
+                control.Dispose();
+        }
     }
 }

@@ -11,10 +11,7 @@ namespace KanbanDashboard.UI
     {
         public BoardColumn Column { get; }
 
-        public event EventHandler<TaskItem>                       EditRequested;
-        public event EventHandler<TaskItem>                       DeleteRequested;
-        public event EventHandler<(TaskItem Task, bool Completed)> CompletedChanged;
-        public event EventHandler<BoardColumn>                    QuickAddRequested;
+        public event EventHandler<BoardColumn> QuickAddRequested;
 
         private readonly DotHeaderPanel  _headerPanel;
         private readonly Panel           _accentUnderline;
@@ -56,28 +53,21 @@ namespace KanbanDashboard.UI
             _cardsPanel.SetScrollColors(panelBackground, headerText);
         }
 
-        /// <summary>Removes all cards; call <see cref="EndRebuild"/> after adding the new ones.</summary>
-        public void BeginRebuild()
-        {
-            _cardsPanel.BeginRebuild();
-            _cardsPanel.ClearCards();
-        }
+        // Batch several SetCards calls (across columns) so layout and scroll are recomputed once.
+        public void BeginUpdate() => _cardsPanel.BeginUpdate();
+        public void EndUpdate()   => _cardsPanel.EndUpdate();
 
-        public void EndRebuild() => _cardsPanel.EndRebuild();
+        /// <summary>
+        /// Makes this column show exactly <paramref name="cards"/>, in order. Existing cards are
+        /// kept (or moved here from another column) rather than recreated.
+        /// </summary>
+        public void SetCards(IReadOnlyList<TaskCardControl> cards) => _cardsPanel.SetCards(cards);
 
         /// <summary>Updates countdowns, progress and overdue styling without recreating cards.</summary>
         public void RefreshCards(AppTheme theme)
         {
             foreach (var card in _cardsPanel.Cards)
                 card.RefreshTimeDependent(theme);
-        }
-
-        public void AddCard(TaskCardControl card)
-        {
-            card.EditRequested    += (_, _)         => EditRequested?.Invoke(this, card.Task);
-            card.DeleteRequested  += (_, _)         => DeleteRequested?.Invoke(this, card.Task);
-            card.CompletedChanged += (_, completed) => CompletedChanged?.Invoke(this, (card.Task, completed));
-            _cardsPanel.AddCard(card);
         }
 
         public void UpdateHeaderCount(int count)
@@ -103,10 +93,10 @@ namespace KanbanDashboard.UI
             private int  _dragAnchorY;
             private int  _dragAnchorScroll;
 
-            // While rebuilding, per-card scroll recalculation is skipped (it is O(n) per
+            // While updating, per-card scroll recalculation is skipped (it is O(n) per
             // add/remove) and the scroll position is restored afterwards.
-            private bool _rebuilding;
-            private int  _scrollBeforeRebuild;
+            private bool _updating;
+            private int  _scrollBeforeUpdate;
 
             private const int BarW     = 5;
             private const int BarRight = 4;
@@ -162,8 +152,17 @@ namespace KanbanDashboard.UI
                 Controls.Add(_track);
 
                 Resize += (_, _) => Relayout();
-                _content.ControlAdded   += (_, _) => { if (!_rebuilding) RefreshScroll(); };
-                _content.ControlRemoved += (_, _) => { if (!_rebuilding) RefreshScroll(); };
+                // Cards can move between columns, so wheel forwarding follows the parent.
+                _content.ControlAdded += (_, e) =>
+                {
+                    HookMouseWheel(e.Control, hook: true);
+                    if (!_updating) RefreshScroll();
+                };
+                _content.ControlRemoved += (_, e) =>
+                {
+                    HookMouseWheel(e.Control, hook: false);
+                    if (!_updating) RefreshScroll();
+                };
             }
 
             public void SetScrollColors(Color panelBg, Color text)
@@ -175,63 +174,42 @@ namespace KanbanDashboard.UI
 
             public IEnumerable<TaskCardControl> Cards => _content.Controls.OfType<TaskCardControl>();
 
-            public void BeginRebuild()
+            public void BeginUpdate()
             {
-                _rebuilding          = true;
-                _scrollBeforeRebuild = _scrollPx;
+                _updating           = true;
+                _scrollBeforeUpdate = _scrollPx;
                 _content.SuspendLayout();
             }
 
-            public void EndRebuild()
+            public void EndUpdate()
             {
                 _content.ResumeLayout(true);
-                _rebuilding = false;
+                _updating = false;
                 RefreshScroll();
-                ApplyScroll(_scrollBeforeRebuild);
+                ApplyScroll(_scrollBeforeUpdate);
             }
 
-            public void ClearCards()
+            public void SetCards(IReadOnlyList<TaskCardControl> cards)
             {
-                var oldCards = new Control[_content.Controls.Count];
-                _content.Controls.CopyTo(oldCards, 0);
-
-                _content.Controls.Clear();
-                if (!_rebuilding)
+                var wanted = new HashSet<Control>(cards);
+                for (int i = _content.Controls.Count - 1; i >= 0; i--)
                 {
-                    _scrollPx = 0;
-                    RefreshScroll();
+                    if (!wanted.Contains(_content.Controls[i]))
+                        _content.Controls.RemoveAt(i);  // not disposed: it may move to another column
                 }
 
-                DisposeDeferred(oldCards);
-            }
-
-            // Controls.Clear() does not dispose, so removed cards would leak their window
-            // handles. Disposal is posted rather than done inline because a re-render can be
-            // triggered from inside one of these cards' own event handlers.
-            private void DisposeDeferred(Control[] controls)
-            {
-                if (controls.Length == 0)
-                    return;
-
-                if (!IsHandleCreated || IsDisposed)
+                int width = AvailableCardWidth();
+                for (int i = 0; i < cards.Count; i++)
                 {
-                    foreach (var c in controls)
-                        c.Dispose();
-                    return;
+                    var card = cards[i];
+                    if (card.Parent != _content)
+                    {
+                        card.Width = width;
+                        _content.Controls.Add(card);  // also detaches it from its old column
+                    }
+                    if (_content.Controls.GetChildIndex(card) != i)
+                        _content.Controls.SetChildIndex(card, i);
                 }
-
-                BeginInvoke(new Action(() =>
-                {
-                    foreach (var c in controls)
-                        c.Dispose();
-                }));
-            }
-
-            public void AddCard(TaskCardControl card)
-            {
-                card.Width = AvailableCardWidth();
-                HookMouseWheel(card);
-                _content.Controls.Add(card);
             }
 
             protected override void OnMouseWheel(MouseEventArgs e)
@@ -243,11 +221,12 @@ namespace KanbanDashboard.UI
             private void OnForwardedWheel(object sender, MouseEventArgs e)
                 => ApplyScroll(_scrollPx - e.Delta / 120 * 50);
 
-            private void HookMouseWheel(Control c)
+            private void HookMouseWheel(Control c, bool hook)
             {
-                c.MouseWheel += OnForwardedWheel;
+                if (hook) c.MouseWheel += OnForwardedWheel;
+                else      c.MouseWheel -= OnForwardedWheel;
                 foreach (Control child in c.Controls)
-                    HookMouseWheel(child);
+                    HookMouseWheel(child, hook);
             }
 
             private void ApplyScroll(int target)

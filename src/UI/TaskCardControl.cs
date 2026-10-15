@@ -58,7 +58,9 @@ namespace KanbanDashboard.UI
             Padding = new Padding(14, 12, 14, 12);
             Cursor = Cursors.Hand;
 
-            _headerRow = new Panel { Dock = DockStyle.Top, Height = 26, BackColor = Color.Transparent };
+            // Child rows/labels leave BackColor unset so they inherit the card's solid colour.
+            // (Transparent would make WinForms repaint the card behind every label.)
+            _headerRow = new Panel { Dock = DockStyle.Top, Height = 26 };
 
             _statusPill = new Pill { Dock = DockStyle.Left, Width = 92, Height = 22 };
 
@@ -89,7 +91,6 @@ namespace KanbanDashboard.UI
                 AutoEllipsis = true,
                 TextAlign = ContentAlignment.BottomLeft,
                 Font = TitleFont,
-                BackColor = Color.Transparent
             };
 
             _descriptionLabel = new Label
@@ -99,31 +100,28 @@ namespace KanbanDashboard.UI
                 AutoEllipsis = true,
                 TextAlign = ContentAlignment.TopLeft,
                 Font = DescriptionFont,
-                BackColor = Color.Transparent,
                 Visible = hasDescription
             };
 
-            _progressRow = new Panel { Dock = DockStyle.Top, Height = 26, BackColor = Color.Transparent };
+            _progressRow = new Panel { Dock = DockStyle.Top, Height = 26 };
             _progressPercentLabel = new Label
             {
                 Dock = DockStyle.Right,
                 Width = 42,
                 TextAlign = ContentAlignment.MiddleRight,
                 Font = PercentFont,
-                BackColor = Color.Transparent
             };
             _progressTrack = new ProgressTrack { Dock = DockStyle.Fill, Margin = new Padding(0, 8, 6, 8) };
             _progressRow.Controls.Add(_progressTrack);
             _progressRow.Controls.Add(_progressPercentLabel);
 
-            _footerRow = new Panel { Dock = DockStyle.Top, Height = 26, BackColor = Color.Transparent };
+            _footerRow = new Panel { Dock = DockStyle.Top, Height = 26 };
             _statusLabel = new Label
             {
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
                 AutoEllipsis = true,
                 Font = StatusFont,
-                BackColor = Color.Transparent
             };
             _toggleButton = new ToggleDoneButton { Dock = DockStyle.Right, Width = 26, Height = 26 };
             _toggleButton.MouseClick += (_, e) =>
@@ -145,8 +143,6 @@ namespace KanbanDashboard.UI
 
             DoubleClick += (_, _) => RaiseAfterInput(EditRequested);
             _titleLabel.DoubleClick += (_, _) => RaiseAfterInput(EditRequested);
-
-            Height = 24 + 26 + 24 + (hasDescription ? 20 : 0) + 26 + 26;
 
             Resize += (_, _) => UpdateRoundedRegion();
 
@@ -194,6 +190,13 @@ namespace KanbanDashboard.UI
 
         public void RefreshFromTask()
         {
+            // The description row only exists when there is a description, so an edit can
+            // change the card's height.
+            bool hasDescription = !string.IsNullOrWhiteSpace(Task.Description);
+            _descriptionLabel.Visible = hasDescription;
+            _descriptionLabel.Height  = hasDescription ? 20 : 0;
+            Height = 24 + 26 + 24 + (hasDescription ? 20 : 0) + 26 + 26;
+
             _titleLabel.Text = string.IsNullOrWhiteSpace(Task.Title) ? "(untitled)" : Task.Title;
             _descriptionLabel.Text = Task.Description;
 
