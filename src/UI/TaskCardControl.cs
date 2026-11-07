@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Globalization;
 using System.Windows.Forms;
 using KanbanDashboard.Models;
 using KanbanDashboard.Services;
@@ -15,7 +16,12 @@ namespace KanbanDashboard.UI
         public event EventHandler DeleteRequested;
         public event EventHandler<bool> CompletedChanged;
 
-        private const int CornerRadius = 12;
+        public event EventHandler DragStarted;
+        public event EventHandler DragMoved;
+        /// <summary>The argument is true for a drop, false if the drag was cancelled.</summary>
+        public event EventHandler<bool> DragEnded;
+
+        public const int CornerRadius = 12;
 
         private readonly Panel _headerRow;
         private readonly Pill _statusPill;
@@ -35,6 +41,10 @@ namespace KanbanDashboard.UI
 
         private Color _accent = Color.Gray;
         private bool  _styledAsOverdue;
+
+        private bool  _pressed;
+        private bool  _dragging;
+        private Point _pressPoint;
 
         // Shared by every card: a re-render recreates all cards, so per-card fonts would
         // allocate (and leak) several GDI font handles each time.
@@ -146,7 +156,67 @@ namespace KanbanDashboard.UI
 
             Resize += (_, _) => UpdateRoundedRegion();
 
+            HookDrag(this);
+
             RefreshFromTask();
+        }
+
+        // The whole card is a drag handle, except the buttons that have their own click action.
+        private void HookDrag(Control c)
+        {
+            if (c == _kebabButton || c == _toggleButton)
+                return;
+
+            c.MouseDown           += OnDragMouseDown;
+            c.MouseMove           += OnDragMouseMove;
+            c.MouseUp             += OnDragMouseUp;
+            c.MouseCaptureChanged += (_, _) => EndDrag(dropped: false);
+
+            foreach (Control child in c.Controls)
+                HookDrag(child);
+        }
+
+        private void OnDragMouseDown(object sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Left) return;
+            _pressed    = true;
+            _pressPoint = Cursor.Position;
+        }
+
+        private void OnDragMouseMove(object sender, MouseEventArgs e)
+        {
+            if (!_pressed) return;
+
+            if (!_dragging)
+            {
+                var size     = SystemInformation.DragSize;
+                var deadzone = new Rectangle(
+                    _pressPoint.X - size.Width / 2, _pressPoint.Y - size.Height / 2, size.Width, size.Height);
+                if (deadzone.Contains(Cursor.Position))
+                    return;
+
+                _dragging = true;
+                DragStarted?.Invoke(this, EventArgs.Empty);
+            }
+
+            DragMoved?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void OnDragMouseUp(object sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Left) return;
+            EndDrag(dropped: true);
+            _pressed = false;
+        }
+
+        public void CancelDrag() => EndDrag(dropped: false);
+
+        private void EndDrag(bool dropped)
+        {
+            if (!_dragging) return;
+            _dragging = false;
+            _pressed  = false;
+            DragEnded?.Invoke(this, dropped);
         }
 
         private void RaiseAfterInput(EventHandler handler) =>
@@ -212,17 +282,20 @@ namespace KanbanDashboard.UI
                 return "No deadline";
 
             if (Task.IsCompleted)
-                return Task.WasCompletedLate ? $"Completed late \u00b7 was due {Task.DueAt:MMM d}" : "Completed on time";
+                return Task.WasCompletedLate ? $"Completed late \u00b7 was due {Due("MMM d")}" : "Completed on time";
 
             var remaining = Task.TimeRemaining!.Value;
             if (remaining <= TimeSpan.Zero)
-                return $"Overdue \u00b7 was due {Task.DueAt:MMM d, h:mm tt}";
+                return $"Overdue \u00b7 was due {Due("MMM d, h:mm tt")}";
 
             if (remaining.TotalDays >= 1)
-                return $"Due {Task.DueAt:MMM d} \u00b7 {(int)remaining.TotalDays}d {remaining.Hours}h left";
+                return $"Due {Due("MMM d")} \u00b7 {(int)remaining.TotalDays}d {remaining.Hours}h left";
 
-            return $"Due {Task.DueAt:h:mm tt} \u00b7 {remaining.Hours}h {remaining.Minutes}m left";
+            return $"Due {Due("h:mm tt")} \u00b7 {remaining.Hours}h {remaining.Minutes}m left";
         }
+
+        // Always English ("Dec 13", "1:55 PM"), whatever the Windows display language is.
+        private string Due(string format) => Task.DueAt.Value.ToString(format, CultureInfo.InvariantCulture);
 
         private void UpdateProgress()
         {

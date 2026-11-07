@@ -129,12 +129,16 @@ namespace KanbanDashboard.UI
             if (e.KeyCode == Keys.T && e.Control)
             {
                 e.SuppressKeyPress = true;
-                AddTask();
+                if (_dragCard == null)
+                    AddTask();
             }
             else if (e.KeyCode == Keys.Escape)
             {
                 e.SuppressKeyPress = true;
-                Application.Exit();
+                if (_dragCard != null)
+                    _dragCard.CancelDrag();
+                else
+                    Application.Exit();
             }
         }
 
@@ -264,6 +268,23 @@ namespace KanbanDashboard.UI
                 DeadlineService.ApplyRules(_data.Tasks, DateTime.Now);
             }
 
+            RenderBoard();
+            SaveBoard();
+        }
+
+        private void MoveTask(TaskItem task, BoardColumn column)
+        {
+            if (column == BoardColumn.Done)
+            {
+                SetCompleted(task, true);
+                return;
+            }
+
+            task.IsCompleted = false;
+            task.CompletedAt = null;
+            task.Column      = column;
+
+            DeadlineService.ApplyRules(_data.Tasks, DateTime.Now);
             RenderBoard();
             SaveBoard();
         }
@@ -412,6 +433,9 @@ namespace KanbanDashboard.UI
             card.EditRequested    += (_, _)         => EditTask(card.Task);
             card.DeleteRequested  += (_, _)         => DeleteTask(card.Task);
             card.CompletedChanged += (_, completed) => SetCompleted(card.Task, completed);
+            card.DragStarted      += (_, _)         => OnCardDragStarted(card);
+            card.DragMoved        += (_, _)         => OnCardDragMoved();
+            card.DragEnded        += (_, dropped)   => OnCardDragEnded(card, dropped);
             return card;
         }
 

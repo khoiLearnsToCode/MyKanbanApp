@@ -17,6 +17,8 @@ namespace KanbanDashboard.UI
         private readonly Panel           _accentUnderline;
         private readonly ThemedScrollPanel _cardsPanel;
         private string _baseTitle;
+        private Color  _accentColor = Color.Gray;
+        private Color  _panelColor  = SystemColors.Control;
 
         public ColumnPanel(BoardColumn column, string title)
         {
@@ -40,12 +42,14 @@ namespace KanbanDashboard.UI
 
         public void SetAccentColor(Color color)
         {
+            _accentColor               = color;
             _headerPanel.DotColor      = color;
             _accentUnderline.BackColor = color;
         }
 
         public void SetBackgroundColors(Color panelBackground, Color headerText)
         {
+            _panelColor                  = panelBackground;
             BackColor                    = panelBackground;
             _cardsPanel.ContentBackColor = panelBackground;
             _headerPanel.BackColor       = panelBackground;
@@ -69,6 +73,10 @@ namespace KanbanDashboard.UI
             foreach (var card in _cardsPanel.Cards)
                 card.RefreshTimeDependent(theme);
         }
+
+        /// <summary>Tints the column while a dragged card is over it and can be dropped here.</summary>
+        public void SetDropHighlight(bool on) =>
+            _cardsPanel.ContentBackColor = on ? ColorHelper.Blend(_panelColor, _accentColor, 0.14f) : _panelColor;
 
         public void UpdateHeaderCount(int count)
         {
@@ -105,7 +113,11 @@ namespace KanbanDashboard.UI
             public Color ContentBackColor
             {
                 get => _content.BackColor;
-                set => _content.BackColor = value;
+                set
+                {
+                    _content.BackColor = value;
+                    BackColor          = value;  // the strip beside the content, under the scrollbar
+                }
             }
 
             public ThemedScrollPanel()

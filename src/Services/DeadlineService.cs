@@ -9,6 +9,23 @@ namespace KanbanDashboard.Services
         public static readonly TimeSpan PrioritizedThreshold = TimeSpan.FromHours(72);
         public static readonly TimeSpan UrgentThreshold = TimeSpan.FromHours(24);
 
+        /// <summary>
+        /// False if <see cref="ApplyRules"/> would immediately pull the task out of
+        /// <paramref name="column"/> because its deadline is too close.
+        /// </summary>
+        public static bool CanPlace(TaskItem task, BoardColumn column, DateTime now)
+        {
+            if (column == BoardColumn.Done || !task.DueAt.HasValue)
+                return true;
+
+            var remaining = task.DueAt.Value - now;
+            if (remaining <= UrgentThreshold)
+                return column == BoardColumn.Urgent;
+            if (remaining <= PrioritizedThreshold)
+                return column != BoardColumn.Chill;
+            return true;
+        }
+
         public static bool ApplyRules(IEnumerable<TaskItem> tasks, DateTime now)
         {
             bool changed = false;
