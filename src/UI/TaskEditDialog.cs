@@ -25,7 +25,8 @@ namespace KanbanDashboard.UI
             string dialogTitle,
             TaskItem existing = null,
             BoardColumn? initialColumn = null,
-            AppTheme theme = null)
+            AppTheme theme = null,
+            DateTime? initialDeadline = null)
             : base(theme)
         {
             Text       = dialogTitle;
@@ -180,6 +181,9 @@ namespace KanbanDashboard.UI
             {
                 _columnBox.SelectedIndex = (int)initialColumn.Value;
             }
+
+            if (existing == null && initialDeadline.HasValue)
+                _deadlinePicker.Value = initialDeadline.Value;
 
             Controls.Add(body);
             Controls.Add(header);

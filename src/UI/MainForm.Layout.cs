@@ -14,6 +14,7 @@ namespace KanbanDashboard.UI
         private Label      _clockLabel;
         private PillButton _addTaskButton;
         private Button     _themeButton;
+        private Button     _viewButton;
         private Button     _clearDoneButton;
 
         private TableLayoutPanel _boardLayout;
@@ -41,7 +42,7 @@ namespace KanbanDashboard.UI
             {
                 Dock      = DockStyle.Left,
                 AutoSize  = false,
-                Width     = 380,
+                Width     = 250,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Font      = new Font("Segoe UI", 14f, FontStyle.Bold),
                 Text      = "Welcome back, Khoi!"
@@ -51,7 +52,7 @@ namespace KanbanDashboard.UI
             {
                 Dock      = DockStyle.Left,
                 AutoSize  = false,
-                Width     = 160,
+                Width     = 130,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Font      = new Font("Consolas", 16f, FontStyle.Bold),
                 Text      = DateTime.Now.ToString("HH:mm:ss")
@@ -65,6 +66,18 @@ namespace KanbanDashboard.UI
                 AutoSizeMode  = AutoSizeMode.GrowAndShrink,
                 WrapContents  = false
             };
+
+            _viewButton = new Button
+            {
+                Text      = "Calendar",
+                AutoSize  = false,
+                Width     = 96,
+                Height    = 34,
+                FlatStyle = FlatStyle.Flat,
+                Margin    = new Padding(0, 15, 12, 0),
+                Cursor    = Cursors.Hand
+            };
+            _viewButton.FlatAppearance.BorderSize = 1;
 
             _themeButton = new Button
             {
@@ -99,6 +112,7 @@ namespace KanbanDashboard.UI
                 Font   = new Font("Segoe UI", 9.5f, FontStyle.Bold)
             };
 
+            rightControls.Controls.Add(_viewButton);
             rightControls.Controls.Add(_themeButton);
             rightControls.Controls.Add(_clearDoneButton);
             rightControls.Controls.Add(_addTaskButton);

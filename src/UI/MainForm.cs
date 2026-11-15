@@ -31,6 +31,8 @@ namespace KanbanDashboard.UI
 
             ApplyTheme();
             RenderBoard();
+            if (_data.ShowCalendar)
+                SetCalendarVisible(true);
 
             _deadlineTimer.Tick += (_, _) => OnDeadlineTick();
             _deadlineTimer.Start();
@@ -43,6 +45,7 @@ namespace KanbanDashboard.UI
         {
             _addTaskButton.Click   += (_, _) => AddTask();
             _themeButton.Click     += (_, _) => EditTheme();
+            _viewButton.Click      += (_, _) => { SetCalendarVisible(!_data.ShowCalendar); SaveBoard(); };
             _clearDoneButton.Click += (_, _) => ClearDone();
 
             foreach (var col in _allColumns)
@@ -187,11 +190,38 @@ namespace KanbanDashboard.UI
 
             foreach (var col in _allColumns)
                 col.RefreshCards(_data.Theme);
+
+            // Overdue colouring is time-based; the calendar repaints only while it is on screen.
+            if (_calendarView?.Visible == true)
+                _calendarView.Invalidate();
         }
 
-        private void AddTask(BoardColumn? presetColumn = null)
+        private CalendarView _calendarView;
+
+        private void SetCalendarVisible(bool show)
         {
-            using var dialog = new TaskEditDialog("Add Task", initialColumn: presetColumn, theme: _data.Theme);
+            if (show && _calendarView == null)
+            {
+                // Created on first use, so a board-only session never pays for it.
+                _calendarView = new CalendarView { Dock = DockStyle.Fill, Padding = new Padding(16, 4, 16, 16) };
+                _calendarView.TaskClicked      += (_, task) => EditTask(task);
+                _calendarView.DayDoubleClicked += (_, day)  => AddTask(deadline: day.AddHours(23).AddMinutes(59));
+                _calendarView.SetData(_data.Tasks, _data.Theme);
+                Controls.Add(_calendarView);
+                _calendarView.BringToFront();  // dock after the top bar so it fills the space below it
+            }
+
+            _data.ShowCalendar = show;
+            _boardLayout.Visible = !show;
+            if (_calendarView != null)
+                _calendarView.Visible = show;
+            _viewButton.Text = show ? "Board" : "Calendar";
+        }
+
+        private void AddTask(BoardColumn? presetColumn = null, DateTime? deadline = null)
+        {
+            using var dialog = new TaskEditDialog("Add Task", initialColumn: presetColumn, theme: _data.Theme,
+                                                  initialDeadline: deadline);
             if (dialog.ShowDialog(this) != DialogResult.OK)
                 return;
 
@@ -340,9 +370,12 @@ namespace KanbanDashboard.UI
             _clockLabel.BackColor = background;
             _clockLabel.ForeColor = ColorHelper.Soften(primary, 0.15f);
 
-            _themeButton.BackColor = panel;
-            _themeButton.ForeColor = text;
-            _themeButton.FlatAppearance.BorderColor = ColorHelper.Soften(text, 0.6f);
+            foreach (var button in new[] { _themeButton, _viewButton })
+            {
+                button.BackColor = panel;
+                button.ForeColor = text;
+                button.FlatAppearance.BorderColor = ColorHelper.Soften(text, 0.6f);
+            }
 
             var doneAccent = ColorHelper.ParseHexOrDefault(theme.DoneColumnHex, Color.SeaGreen);
             _clearDoneButton.BackColor = panel;
@@ -415,6 +448,8 @@ namespace KanbanDashboard.UI
 
                 foreach (var col in _allColumns)
                     col.UpdateHeaderCount(perColumn[col.Column].Count);
+
+                _calendarView?.SetData(_data.Tasks, _data.Theme);
             }
             finally
             {
