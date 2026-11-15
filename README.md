@@ -27,7 +27,17 @@ A lightweight, keyboard-friendly Kanban board for Windows — built with .NET 8 
 
 ## Screenshots
 
-![Kanban Dashboard Screenshot](src/Screenshot.png)
+**Board**: tasks move toward Urgent automatically as their deadlines approach.
+
+![Board view](docs/screenshots/board.png)
+
+**Calendar**: every deadline of the month at a glance. Switch with the **Calendar** / **Board** button.
+
+![Calendar view](docs/screenshots/calendar.png)
+
+| Add / edit a task | Soft Daybreak light theme |
+|---|---|
+| ![Add Task dialog with the wheel time picker](docs/screenshots/add-task.png) | ![Board in the light theme](docs/screenshots/board-light.png) |
 
 ---
 

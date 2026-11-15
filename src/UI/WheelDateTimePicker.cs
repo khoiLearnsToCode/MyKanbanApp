@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using System.Globalization;
+using System.Linq;
 using System.Windows.Forms;
 using KanbanDashboard.Services;
 
@@ -33,6 +34,10 @@ namespace KanbanDashboard.UI
         private readonly System.Windows.Forms.Timer _animation = new() { Interval = 15 };
 
         private DateTime _minDate;
+
+        // Day labels are long; at higher display scaling the 15pt font no longer fits the day
+        // column, so a smaller size is chosen to fit (recomputed when size or DPI changes).
+        private Font _dateFont;
 
         private Wheel _active;              // wheel being dragged / receiving arrow keys
         private int   _dragStartY;
@@ -153,9 +158,48 @@ namespace KanbanDashboard.UI
             }
         }
 
+        private Font DateFont(Graphics g, float columnWidth)
+        {
+            if (_dateFont != null)
+                return _dateFont;
+
+            // Widest labels the day wheel can show, for this year and for other years.
+            var samples = new[] { "Wed Sep 28", "Wed Nov 28", "Sep 28, 2028", "Nov 28, 2028" };
+            for (float size = WheelFont.Size; size > 8f; size -= 0.5f)
+            {
+                var candidate = size == WheelFont.Size ? WheelFont : new Font(WheelFont.FontFamily, size);
+                bool fits = samples.All(t => g.MeasureString(t, candidate).Width <= columnWidth - 6);
+                if (fits || size - 0.5f <= 8f)
+                    return _dateFont = candidate;
+                if (candidate != WheelFont)  // the shared font must never be disposed
+                    candidate.Dispose();
+            }
+            return _dateFont = WheelFont;
+        }
+
+        private void ResetDateFont()
+        {
+            if (_dateFont != null && _dateFont != WheelFont)
+                _dateFont.Dispose();
+            _dateFont = null;
+        }
+
+        protected override void OnResize(EventArgs e)
+        {
+            ResetDateFont();
+            base.OnResize(e);
+        }
+
+        protected override void OnDpiChangedAfterParent(EventArgs e)
+        {
+            ResetDateFont();
+            base.OnDpiChangedAfterParent(e);
+        }
+
         private void DrawWheel(Graphics g, Wheel wheel, Color color, bool fadeWithDepth)
         {
             var bounds  = ColumnBounds(wheel);
+            var font    = wheel == _dateWheel ? DateFont(g, bounds.Width) : WheelFont;
             float midY  = Height / 2f;
             int   first = (int)Math.Floor(wheel.Offset) - 4;
 
@@ -177,7 +221,7 @@ namespace KanbanDashboard.UI
                 var state = g.Save();
                 g.TranslateTransform(bounds.X, y);
                 g.ScaleTransform(1f, depth);
-                g.DrawString(wheel.Label(wheel.Wrap(i)), WheelFont, brush,
+                g.DrawString(wheel.Label(wheel.Wrap(i)), font, brush,
                              new RectangleF(0, -RowHeight / 2f, bounds.Width, RowHeight), wheel.Format);
                 g.Restore(state);
             }
@@ -316,7 +360,10 @@ namespace KanbanDashboard.UI
         protected override void Dispose(bool disposing)
         {
             if (disposing)
+            {
                 _animation.Dispose();
+                ResetDateFont();
+            }
             base.Dispose(disposing);
         }
 
