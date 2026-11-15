@@ -16,6 +16,7 @@ namespace KanbanDashboard.UI
         private Button     _themeButton;
         private Button     _viewButton;
         private Button     _clearDoneButton;
+        private FlowLayoutPanel _rightControls;
 
         private TableLayoutPanel _boardLayout;
 
@@ -38,11 +39,12 @@ namespace KanbanDashboard.UI
 
             _topBar = new Panel { Dock = DockStyle.Top, Height = 64, Padding = new Padding(20, 0, 20, 0) };
 
+            // Header labels size themselves to their text: fixed widths made the text wrap
+            // when Windows display scaling enlarges the font.
             _appTitleLabel = new Label
             {
                 Dock      = DockStyle.Left,
-                AutoSize  = false,
-                Width     = 250,
+                AutoSize  = true,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Font      = new Font("Segoe UI", 14f, FontStyle.Bold),
                 Text      = "Welcome back, Khoi!"
@@ -51,14 +53,14 @@ namespace KanbanDashboard.UI
             _clockLabel = new Label
             {
                 Dock      = DockStyle.Left,
-                AutoSize  = false,
-                Width     = 130,
+                AutoSize  = true,
+                Padding   = new Padding(24, 0, 0, 0),
                 TextAlign = ContentAlignment.MiddleLeft,
                 Font      = new Font("Consolas", 16f, FontStyle.Bold),
                 Text      = DateTime.Now.ToString("HH:mm:ss")
             };
 
-            var rightControls = new FlowLayoutPanel
+            var rightControls = _rightControls = new FlowLayoutPanel
             {
                 Dock          = DockStyle.Right,
                 FlowDirection = FlowDirection.LeftToRight,
@@ -120,6 +122,7 @@ namespace KanbanDashboard.UI
             _topBar.Controls.Add(rightControls);
             _topBar.Controls.Add(_clockLabel);
             _topBar.Controls.Add(_appTitleLabel);
+            _topBar.Resize += (_, _) => FitTopBar();
 
             _boardLayout = new TableLayoutPanel
             {
@@ -146,6 +149,15 @@ namespace KanbanDashboard.UI
 
             Controls.Add(_boardLayout);
             Controls.Add(_topBar);
+        }
+
+        // On a narrow window (or large display scaling) drop the clock rather than overlap
+        // the buttons.
+        private void FitTopBar()
+        {
+            int needed = _topBar.Padding.Horizontal + _appTitleLabel.PreferredWidth
+                       + _clockLabel.PreferredWidth + _rightControls.Width;
+            _clockLabel.Visible = needed <= _topBar.Width;
         }
 
         private ColumnPanel PanelFor(BoardColumn column) => column switch

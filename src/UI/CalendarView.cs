@@ -338,12 +338,6 @@ namespace KanbanDashboard.UI
                 DayDoubleClicked?.Invoke(this, hit.Date);
         }
 
-        protected override void OnMouseWheel(MouseEventArgs e)
-        {
-            base.OnMouseWheel(e);
-            Month = _month.AddMonths(e.Delta > 0 ? -1 : 1);
-        }
-
         // Every task of a crowded day, in a theme-coloured menu created only while it is open.
         private void ShowDayMenu(Hit hit)
         {

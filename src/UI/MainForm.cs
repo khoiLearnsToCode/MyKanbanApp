@@ -103,6 +103,19 @@ namespace KanbanDashboard.UI
         private const int HTBOTTOMRIGHT = 17;
         private const int GripSize      = 8;
 
+        // Left/Right change the calendar month. Handled here, before focused buttons would use
+        // the arrows to move focus.
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (_calendarView?.Visible == true && _dragCard == null &&
+                (keyData == Keys.Left || keyData == Keys.Right))
+            {
+                _calendarView.Month = _calendarView.Month.AddMonths(keyData == Keys.Left ? -1 : 1);
+                return true;
+            }
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
+
         protected override void WndProc(ref Message m)
         {
             if (m.Msg == WM_NCHITTEST)
