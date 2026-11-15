@@ -39,12 +39,13 @@ namespace KanbanDashboard.UI
 
             _topBar = new Panel { Dock = DockStyle.Top, Height = 64, Padding = new Padding(20, 0, 20, 0) };
 
-            // Header labels size themselves to their text: fixed widths made the text wrap
-            // when Windows display scaling enlarges the font.
+            // Header labels stay full-height (so the text is vertically centred) but take their
+            // width from the text in FitTopBar: fixed widths made the text wrap when Windows
+            // display scaling enlarges the font.
             _appTitleLabel = new Label
             {
                 Dock      = DockStyle.Left,
-                AutoSize  = true,
+                AutoSize  = false,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Font      = new Font("Segoe UI", 14f, FontStyle.Bold),
                 Text      = "Welcome back, Khoi!"
@@ -53,7 +54,7 @@ namespace KanbanDashboard.UI
             _clockLabel = new Label
             {
                 Dock      = DockStyle.Left,
-                AutoSize  = true,
+                AutoSize  = false,
                 Padding   = new Padding(24, 0, 0, 0),
                 TextAlign = ContentAlignment.MiddleLeft,
                 Font      = new Font("Consolas", 16f, FontStyle.Bold),
@@ -122,7 +123,7 @@ namespace KanbanDashboard.UI
             _topBar.Controls.Add(rightControls);
             _topBar.Controls.Add(_clockLabel);
             _topBar.Controls.Add(_appTitleLabel);
-            _topBar.Resize += (_, _) => FitTopBar();
+            _topBar.Layout += (_, _) => FitTopBar();  // also fires after display-scaling changes
 
             _boardLayout = new TableLayoutPanel
             {
@@ -155,6 +156,10 @@ namespace KanbanDashboard.UI
         // the buttons.
         private void FitTopBar()
         {
+            // Setting an unchanged width is a no-op, so this cannot re-trigger layout endlessly.
+            _appTitleLabel.Width = _appTitleLabel.PreferredWidth;
+            _clockLabel.Width    = _clockLabel.PreferredWidth;
+
             int needed = _topBar.Padding.Horizontal + _appTitleLabel.PreferredWidth
                        + _clockLabel.PreferredWidth + _rightControls.Width;
             _clockLabel.Visible = needed <= _topBar.Width;
